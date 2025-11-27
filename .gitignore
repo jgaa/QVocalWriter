@@ -1,3 +1,7 @@
+# Build directories
+build/
+_codeql_build_dir/
+
 # C++ objects and libs
 *.slo
 *.lo
