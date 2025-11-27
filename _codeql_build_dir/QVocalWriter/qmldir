@@ -1,5 +1,0 @@
-module QVocalWriter
-typeinfo qvocalwriter.qmltypes
-prefer :/QVocalWriter/
-Main 1.0 qml/Main.qml
-
