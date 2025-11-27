@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/QVocalWriter">
+    <file alias="qmldir">/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/QVocalWriter/qmldir</file>
+  </qresource>
+</RCC>
+

@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/QVocalWriter/">
+    <file alias="qml/Main.qml">/home/runner/work/QVocalWriter/QVocalWriter/qml/Main.qml</file>
+  </qresource>
+</RCC>
+

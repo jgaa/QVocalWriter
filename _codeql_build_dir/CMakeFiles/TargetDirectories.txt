@@ -1,0 +1,15 @@
+/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/CMakeFiles/qvocalwriter.dir
+/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/CMakeFiles/qvocalwriter_automoc_json_extraction.dir
+/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/CMakeFiles/qvocalwriter_qmltyperegistration.dir
+/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/CMakeFiles/all_qmltyperegistrations.dir
+/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/CMakeFiles/qvocalwriter_other_files.dir
+/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/CMakeFiles/qvocalwriter_qmllint.dir
+/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/CMakeFiles/qvocalwriter_qmllint_json.dir
+/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/CMakeFiles/all_qmllint.dir
+/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/CMakeFiles/all_qmllint_json.dir
+/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/CMakeFiles/qvocalwriter_tooling.dir
+/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/CMakeFiles/qvocalwriter_qmlimportscan.dir
+/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/CMakeFiles/edit_cache.dir
+/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/CMakeFiles/rebuild_cache.dir
+/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/CMakeFiles/qvocalwriter_autogen_timestamp_deps.dir
+/home/runner/work/QVocalWriter/QVocalWriter/_codeql_build_dir/CMakeFiles/qvocalwriter_autogen.dir

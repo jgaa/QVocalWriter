@@ -30,4 +30,3 @@ set_target_properties(qvocalwriter PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
-
