@@ -1,6 +1,7 @@
+import QtCore
 import QtQuick
 import QtQuick.Window
-import Qt.labs.settings  // <--- Add this
+import QtQuick.Layouts
 
 Window {
     id: root
@@ -27,9 +28,17 @@ Window {
         property int windowHeight: 600
     }
 
-    Text {
-        anchors.centerIn: parent
-        text: qsTr("Welcome to QVocalWriter")
-        font.pixelSize: 24
+
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: 20
+
+        RecordingPane {
+            Layout.preferredWidth: 400
+        }
+
+        Item {
+            Layout.fillHeight: true
+        }
     }
 }
