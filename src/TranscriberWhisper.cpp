@@ -397,8 +397,11 @@ void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastCh
         (globalStartSamples * 1000.0f) / sample_rate_;
 
     const int nSegments = whisper_full_n_segments(ctx_);
-    QString newText;
 
+    QString unstableTail;      // this call's "tail" for UI
+    float   newestSegEndMs = m_stableUntilMs;
+
+    QString thisBatch;
     for (int i = 0; i < nSegments; ++i) {
         const float segLocalStartMs = whisper_full_get_segment_t0(ctx_, i);
         const float segLocalEndMs   = whisper_full_get_segment_t1(ctx_, i);
@@ -406,40 +409,43 @@ void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastCh
         const float segGlobalStartMs = globalStartMs + segLocalStartMs;
         const float segGlobalEndMs   = globalStartMs + segLocalEndMs;
 
-        if (segGlobalEndMs <= last_emitted_end_time_ms_ + 1.0f)
+        const char *segTextC = whisper_full_get_segment_text(ctx_, i);
+        if (!segTextC || !*segTextC)
             continue;
 
-        const char *segText = whisper_full_get_segment_text(ctx_, i);
-        if (!segText || !*segText)
+        const QString segText = QString::fromUtf8(segTextC);
+        thisBatch += segText;
+
+        newestSegEndMs = std::max(newestSegEndMs, segGlobalEndMs);
+
+        // Already fully committed → skip
+        if (segGlobalEndMs <= m_stableUntilMs + 1.0f)
             continue;
 
-        newText += QString::fromUtf8(segText);
-        last_emitted_end_time_ms_ = std::max(last_emitted_end_time_ms_, segGlobalEndMs);
+        const float liveEdgeMs = newestSegEndMs;
+        const float thresholdStableMs = liveEdgeMs - m_unstableMarginMs;
+
+        if (segGlobalEndMs < thresholdStableMs) {
+            // This segment is safely in the "past" → commit permanently
+            m_stableTranscript += segText;
+            m_stableUntilMs = segGlobalEndMs;
+        } else {
+            // Still close to the live edge → unstable tail
+            unstableTail += segText;
+        }
     }
 
-    // --- 6) Emit only *new* text (avoid duplicates across overlaps) ------
+    if (!thisBatch.isEmpty()) {
+        LOG_DEBUG_N << "Emitting partial text: " << thisBatch;
+        emit partialTextAvailable(thisBatch);
+    }
 
-    // const int nSegments = whisper_full_n_segments(ctx_);
-    // QString newText;
+    if (lastChunk) {
+        // After the loop above, just treat the remaining unstable tail as final
+        m_stableTranscript += unstableTail;
+        m_stableUntilMs = newestSegEndMs;
+        unstableTail.clear();
 
-    // for (int i = 0; i < nSegments; ++i) {
-    //     const float segStartMs = whisper_full_get_segment_t0(ctx_, i);
-    //     const float segEndMs   = whisper_full_get_segment_t1(ctx_, i);
-
-    //     // Only accept segments that end after the last emitted segment
-    //     if (segEndMs <= m_lastEmittedEndTimeMs + 1.0f)
-    //         continue;
-
-    //     const char *segText = whisper_full_get_segment_text(ctx_, i);
-    //     if (!segText || !*segText)
-    //         continue;
-
-    //     newText += QString::fromUtf8(segText);
-    //     m_lastEmittedEndTimeMs = std::max(m_lastEmittedEndTimeMs, segEndMs);
-    // }
-
-    if (!newText.isEmpty()) {
-        LOG_DEBUG_N << "Emitting new partial text from Whisper:" << newText;
-        emit partialTextAvailable(newText);
+        LOG_DEBUG_N << "Final text: " << m_stableTranscript;
     }
 }

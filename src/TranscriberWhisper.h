@@ -65,7 +65,7 @@ private:
     int sample_rate_ = 16000; // Hz
     int window_ms_ = 10000; // total buffer span, e.g. 10000 ms
     float overlap_fraction_ = 0.15F; // 0.0 .. 0.9
-    int min_ms_before_process_ = 1500; // minimum audio before first Whisper call
+    int min_ms_before_process_ = 1000; // minimum audio before first Whisper call
 
     // Derived / state
     std::vector<float> pcm_; // contiguous sliding window
@@ -74,4 +74,12 @@ private:
     int64_t total_samples_ = 0; // global samples received
     int64_t last_processed_sample_ = 0; // last sample index we processed with Whisper
     float last_emitted_end_time_ms_ = 0.0f; // last segment end time we emitted
+
+    // Transcript accumulation
+    QString m_stableTranscript;     // committed text, won't be changed again
+    float   m_stableUntilMs = 0.0f; // global time up to which text is stable
+
+    // streaming config
+    float   m_unstableMarginMs = 1000.0f; // last 1000 ms are "unstable" tail
+
 };
