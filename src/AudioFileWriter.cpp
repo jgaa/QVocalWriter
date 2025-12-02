@@ -45,14 +45,21 @@ void AudioFileWriter::run()
 
     AudioRingBuffer::Chunk chunk;
     qint64 currentOffset = 0;
+    auto segment = 0u;
 
     while (!stopped_) {
-        if (!ring_->pop(chunk))
+        if (!ring_->pop(chunk)) {
+            LOG_DEBUG_N << "AudioFileWriter: ring buffer stopped or empty";
             break; // stopped or no more data
+        }
+
+        //LOG_TRACE_N << "Writing #" << ++segment << " offset=" << currentOffset << " size=" << chunk.size();
 
         const qint64 written = file_.write(chunk);
-        if (written <= 0)
+        if (written <= 0) {
+            LOG_ERROR_N << "AudioFileWriter: failed to write to file";
             break;
+        }
 
         FileChunk fc{ currentOffset, static_cast<qsizetype>(written) };
         currentOffset += written;

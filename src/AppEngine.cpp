@@ -65,8 +65,9 @@ void AppEngine::startRecording()
 
     recorder_->start();
     transcriber_->start([this](bool ok) {
+        LOG_DEBUG_N << "Transcriber finished with status: " << (ok ? "OK" : "Error");
         if (ok) {
-            setRecordingState(RecordingState::Idle);
+            setRecordingState(RecordingState::DoneRecording);
         } else {
             setRecordingState(RecordingState::Error);
         }
@@ -248,10 +249,10 @@ void AppEngine::createPipelineIfNeeded()
             &AppEngine::modelDownloadProgress
         );
 
-        transcriber_->start([this](bool ok) {
-            LOG_DEBUG_N << "Transcriber finished with status: " << (ok ? "OK" : "Error");
-            setRecordingState(RecordingState::DoneRecording);
-        });
+        // transcriber_->start([this](bool ok) {
+        //     LOG_DEBUG_N << "Transcriber finished with status: " << (ok ? "OK" : "Error");
+        //     setRecordingState(RecordingState::DoneRecording);
+        // });
     }
 }
 

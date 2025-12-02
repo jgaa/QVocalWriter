@@ -3,8 +3,11 @@
 #include <QObject>
 #include <QAudioSource>
 #include <QAudioFormat>
+#include <QByteArray>
 
 #include "AudioCaptureDevice.h"
+
+constexpr int AUDIO_BUFFER_SIZE = 1024 * 16;  // 32 KB buffer;
 
 class AudioRecorder : public QObject
 {

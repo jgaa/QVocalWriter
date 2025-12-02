@@ -3,14 +3,58 @@
 #include <QEventLoop>
 
 #include <whisper.h>
+#include <string_view>
 
 #include "TranscriberWhisper.h"
 
 #include "logging.h"
 
+using namespace std;
+
+namespace {
+
+/*
+ *     enum ggml_log_level {
+        GGML_LOG_LEVEL_NONE  = 0,
+        GGML_LOG_LEVEL_DEBUG = 1,
+        GGML_LOG_LEVEL_INFO  = 2,
+        GGML_LOG_LEVEL_WARN  = 3,
+        GGML_LOG_LEVEL_ERROR = 4,
+        GGML_LOG_LEVEL_CONT  = 5, // continue previous log
+    };
+*/
+
+void whisperLogger(ggml_log_level level, const char *msg, void *user_data) {
+    string_view message(msg);
+    message = message.substr(0, message.empty() ? 0 : message.size() -1);
+
+    switch(level) {
+        case GGML_LOG_LEVEL_ERROR:
+            LOG_ERROR << "[whisper] " << message;
+            break;
+        case GGML_LOG_LEVEL_WARN:
+            LOG_WARN << "[whisper] " << message;
+            break;
+        case GGML_LOG_LEVEL_INFO:
+            LOG_INFO << "[whisper] " << message;
+            break;
+        case GGML_LOG_LEVEL_DEBUG:
+            LOG_DEBUG << "[whisper] " << message;
+            break;
+        case GGML_LOG_LEVEL_CONT:
+            LOG_TRACE << "[whisper] " << message;
+            break;
+        case GGML_LOG_LEVEL_NONE:
+            // no logging
+            break;
+    }
+}
+} // anon ns
+
 TranscriberWhisper::TranscriberWhisper(ChunkQueue *queue, const QString &filePath, QAudioFormat format)
 : Transcriber(queue, filePath, format)
 {
+    whisper_log_set(whisperLogger, nullptr);
 }
 
 TranscriberWhisper::~TranscriberWhisper()
@@ -141,7 +185,6 @@ void TranscriberWhisper::setModelDirectory(const QString &dir)
 {
     modelDir_ = dir;
 }
-
 bool TranscriberWhisper::init()
 {
     if (initialized_)
@@ -152,6 +195,8 @@ bool TranscriberWhisper::init()
 
     if (!loadModelContext())
         return false;
+
+    startSession();
 
     initialized_ = true;
     return true;
@@ -182,56 +227,219 @@ bool TranscriberWhisper::loadModelContext()
     return true;
 }
 
-void TranscriberWhisper::processChunk(const QByteArray &data)
+void TranscriberWhisper::startSession()
 {
-    assert(ctx_);
-    assert(initialized());
+    const int windowSamples = (window_ms_ * sample_rate_) / 1000;
+    pcm_.assign(windowSamples, 0.0f);
+    pcm_fill_ = 0;
 
-    if (!initialized() || !ctx_) {
+    total_samples_         = 0;
+    last_processed_sample_  = 0;
+    last_emitted_end_time_ms_ = 0.0f;
+
+    LOG_DEBUG_N << "TranscriberWhisper: started session with window "
+                 << window_ms_ << " ms ("
+                 << windowSamples << " samples)";
+}
+
+void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastChunk)
+{
+    if (!ctx_)
         return;
+
+    // LOG_TRACE_N << "TranscriberWhisper::processChunk #" << ++chunks_ << " called with data size ="
+    //             << data.size() << " lastChunk =" << lastChunk;
+
+    // --- 1) Derive window size in samples ---------------------------------
+    const int windowSamples = (window_ms_ * sample_rate_) / 1000;
+    if (windowSamples <= 0)
+        return;
+
+    // If settings changed mid-session, re-init buffer
+    if (static_cast<int>(pcm_.size()) != windowSamples) {
+        pcm_.assign(windowSamples, 0.0f);
+        pcm_fill_             = 0;
+        total_samples_        = 0;
+        last_processed_sample_ = 0;
+        last_emitted_end_time_ms_ = 0.0f;
     }
 
-    assert(format().sampleFormat() == QAudioFormat::Int16);
-    const auto *samplesI16 = reinterpret_cast<const int16_t*>(data.constData());
-    const int nSamples = data.size() / sizeof(int16_t);
+    // --- 2) Append new samples (if any) with sliding window via memmove ---
 
-    std::vector<float> pcm;
-    pcm.reserve(nSamples);
-    for (int i = 0; i < nSamples; ++i) {
-        pcm.push_back(samplesI16[i] / 32768.0f);
+    const int16_t *samplesI16 = nullptr;
+    int newSamples = 0;
+
+    if (!data.empty()) {
+        samplesI16 = reinterpret_cast<const int16_t*>(data.data());
+        newSamples = static_cast<int>(data.size() / sizeof(int16_t));
+
+        if (newSamples > 0) {
+            const int totalNeeded = pcm_fill_ + newSamples;
+
+            if (totalNeeded > windowSamples) {
+                const int overflow = totalNeeded - windowSamples;
+
+                if (overflow >= pcm_fill_) {
+                    // we overflowed past everything we had -> drop all
+                    pcm_fill_ = 0;
+                } else {
+                    // slide existing data left by 'overflow' samples
+                    std::memmove(
+                        pcm_.data(),
+                        pcm_.data() + overflow,
+                        (pcm_fill_ - overflow) * sizeof(float)
+                        );
+                    pcm_fill_ -= overflow;
+                }
+            }
+
+            // now there is space for newSamples
+            for (int i = 0; i < newSamples; ++i) {
+                pcm_[pcm_fill_++] = samplesI16[i] / 32768.0f;
+            }
+
+            total_samples_ += newSamples;
+        }
     }
 
-    // TODO: you can keep a rolling buffer and only call whisper_full()
-    // once you have enough samples for e.g. 5-10 seconds. For now: naive.
+    // At this point:
+    //  - m_pcm[0 .. m_pcmFill) contains the latest audio (up to windowSamples)
+    //  - m_totalSamples is updated with all samples we've seen this session
+
+    // If there's no audio at all, nothing to do (even for lastChunk)
+    if (pcm_fill_ <= 0)
+        return;
+
+    // --- 3) Decide whether to run Whisper now -----------------------------
+
+    // Minimum audio before first/regular calls (unless lastChunk)
+    const int64_t minSamplesBeforeProcess =
+        (static_cast<int64_t>(min_ms_before_process_) * sample_rate_) / 1000;
+
+    // Overlap fraction controls how often we call Whisper (step size)
+    const float overlapClamped = std::clamp(overlap_fraction_, 0.0f, 0.9f);
+    const int64_t stepSamples =
+        static_cast<int64_t>(windowSamples * (1.0f - overlapClamped));
+
+    bool shouldRun = false;
+
+    if (lastChunk) {
+        // On final call: always flush pending audio
+        // (even if we didn’t reach the 'step' yet)
+        shouldRun = true;
+    } else {
+        // Not the last chunk: enforce minMs + step
+        if (total_samples_ >= minSamplesBeforeProcess) {
+            const int64_t sinceLastProcessed = total_samples_ - last_processed_sample_;
+            if (sinceLastProcessed >= stepSamples) {
+                shouldRun = true;
+            }
+        }
+    }
+
+    if (!shouldRun)
+        return;
+
+    // --- 4) Prepare Whisper parameters -----------------------------------
 
     auto params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+
+    // Threads
+    const unsigned hwThreads = std::max(1u, std::thread::hardware_concurrency());
+    params.n_threads = std::min<unsigned>(hwThreads, 48u);  // tune as needed
+
     params.print_progress   = false;
     params.print_realtime   = false;
     params.print_timestamps = true;
+    params.offset_ms = 0;  // or leave default
 
-    QByteArray langUtf8 = language_.toUtf8();
-    params.language      = langUtf8.constData(); // "en", "auto", etc.
+    const QByteArray langUtf8 = language_.toUtf8();
+    params.language = langUtf8.isEmpty() ? nullptr : langUtf8.constData();
 
-    // Blocking call on this worker thread:
-    const int rc = whisper_full(ctx_, params, pcm.data(), pcm.size());
+    params.no_context     = false;
+    params.single_segment = false;
+
+    if (lastChunk) {
+        // Let Whisper be a bit more thorough for the final pass.
+        params.max_len          = 0;     // no token limit
+        params.token_timestamps = true;
+    }
+
+    // --- 5) Run Whisper on the current sliding buffer --------------------
+
+    LOG_TRACE_N << "Calling whisper_full() with "
+                 << pcm_fill_ << " samples ("
+                 << (pcm_fill_ * 1000 / sample_rate_) << " ms), "
+                 << "offset_ms=" << params.offset_ms;
+    const auto when = std::chrono::steady_clock::now();
+    const int rc = whisper_full(
+        ctx_,
+        params,
+        pcm_.data(),
+        pcm_fill_
+        );
+
+    const auto duration = std::chrono::steady_clock::now() - when;
+    LOG_DEBUG_N << "whisper_full() returned rc =" << rc
+                << " in " << std::chrono::duration_cast<std::chrono::milliseconds>(duration).count()
+                << " ms";
+
+    last_processed_sample_ = total_samples_;
+
     if (rc != 0) {
-        emit errorOccurred(tr("whisper_full() failed with code %1").arg(rc));
+        // Optional: log via your logger
         return;
     }
 
-    // Collect all segment texts
+    const int64_t globalStartSamples =
+        std::max<int64_t>(0, total_samples_ - pcm_fill_);
+    const float globalStartMs =
+        (globalStartSamples * 1000.0f) / sample_rate_;
+
     const int nSegments = whisper_full_n_segments(ctx_);
-    QString combined;
+    QString newText;
+
     for (int i = 0; i < nSegments; ++i) {
-        const char *txt = whisper_full_get_segment_text(ctx_, i);
-        if (!txt)
+        const float segLocalStartMs = whisper_full_get_segment_t0(ctx_, i);
+        const float segLocalEndMs   = whisper_full_get_segment_t1(ctx_, i);
+
+        const float segGlobalStartMs = globalStartMs + segLocalStartMs;
+        const float segGlobalEndMs   = globalStartMs + segLocalEndMs;
+
+        if (segGlobalEndMs <= last_emitted_end_time_ms_ + 1.0f)
             continue;
-        combined += QString::fromUtf8(txt);
+
+        const char *segText = whisper_full_get_segment_text(ctx_, i);
+        if (!segText || !*segText)
+            continue;
+
+        newText += QString::fromUtf8(segText);
+        last_emitted_end_time_ms_ = std::max(last_emitted_end_time_ms_, segGlobalEndMs);
     }
 
-    if (!combined.isEmpty()) {
-        emit partialTextAvailable(combined);
-        // If you want to treat each chunk as "final", also emit:
-       // emit finalSegmentAvailable(combined);
+    // --- 6) Emit only *new* text (avoid duplicates across overlaps) ------
+
+    // const int nSegments = whisper_full_n_segments(ctx_);
+    // QString newText;
+
+    // for (int i = 0; i < nSegments; ++i) {
+    //     const float segStartMs = whisper_full_get_segment_t0(ctx_, i);
+    //     const float segEndMs   = whisper_full_get_segment_t1(ctx_, i);
+
+    //     // Only accept segments that end after the last emitted segment
+    //     if (segEndMs <= m_lastEmittedEndTimeMs + 1.0f)
+    //         continue;
+
+    //     const char *segText = whisper_full_get_segment_text(ctx_, i);
+    //     if (!segText || !*segText)
+    //         continue;
+
+    //     newText += QString::fromUtf8(segText);
+    //     m_lastEmittedEndTimeMs = std::max(m_lastEmittedEndTimeMs, segEndMs);
+    // }
+
+    if (!newText.isEmpty()) {
+        LOG_DEBUG_N << "Emitting new partial text from Whisper:" << newText;
+        emit partialTextAvailable(newText);
     }
 }

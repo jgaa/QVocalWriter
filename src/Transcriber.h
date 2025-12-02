@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <thread>
+#include <span>
 
 #include <QObject>
 #include <QFile>
@@ -39,7 +40,7 @@ signals:
 
 protected:
     virtual bool init() = 0;
-    virtual void processChunk(const QByteArray &data) = 0;
+    virtual void processChunk(std::span<const uint8_t> data, bool lastChunk = false) = 0;
 
 private:
     void run();
@@ -49,5 +50,5 @@ private:
     QAudioFormat     format_;
     std::optional<std::jthread>     thread_;
     std::atomic_bool stopped_{true};
-    finished_t finished_;
+    finished_t finished_fn_;
 };

@@ -28,6 +28,8 @@ void AudioRecorder::start()
     setState(State::STARTED);
 
     captureDevice_->open(QIODevice::WriteOnly);
+
+    audioSource_->setBufferSize(AUDIO_BUFFER_SIZE); // in bytes
     audioSource_->start(captureDevice_.get());  // push mode
 
     emit started();
