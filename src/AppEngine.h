@@ -4,9 +4,9 @@
 #include <QQmlComponent>
 
 #include "AudioController.h"
+#include "Queue.h"
 
 class AudioRecorder;
-class ChunkQueue;
 class AudioFileWriter;
 class Transcriber;         // base class
 class TranscriberWhisper;  // concrete class
@@ -21,9 +21,12 @@ class AppEngine : public QObject
     Q_PROPERTY(QStringList modelSizes READ modelSizes CONSTANT)
     Q_PROPERTY(int languageIndex READ languageIndex WRITE setLanguageIndex NOTIFY languageIndexChanged)
     Q_PROPERTY(int modelIndex READ modelIndex WRITE setModelIndex NOTIFY modelIndexChanged)
+    Q_PROPERTY(int postModelIndex READ postModelIndex WRITE setPostModelIndex NOTIFY postModelIndexChanged)
     Q_PROPERTY(bool canPrepare READ canPrepare NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canStart READ canStart NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canStop READ canStop NOTIFY stateFlagsChanged)
+    Q_PROPERTY(const qreal& recordingLevel MEMBER recording_level_ NOTIFY recordingLevelChanged)
+    Q_PROPERTY(const QString& recordedText MEMBER current_recorded_text_ NOTIFY recordedTextChanged)
 
 public:
     enum RecordingState {
@@ -32,17 +35,19 @@ public:
         Ready,
         Recording,
         Processing,
-        Finishing,
-        DoneRecording,
+        Done,
         Error
     };
     Q_ENUM(RecordingState)
 
     Q_INVOKABLE void setModelIndex(int index);
+    Q_INVOKABLE void setPostModelIndex(int index);
     Q_INVOKABLE void setLanguageIndex(int index);
     Q_INVOKABLE void startRecording();
     Q_INVOKABLE void stopRecording();
     Q_INVOKABLE void prepare();
+    Q_INVOKABLE void saveTranscriptToFile(const QUrl &path);
+    Q_INVOKABLE void reset();
 
     AppEngine();
 
@@ -52,6 +57,7 @@ public:
 
     int  languageIndex() const { return language_index_; }
     int  modelIndex()    const { return model_index_;    }
+    int  postModelIndex()const { return post_model_index_;}
 
     bool canPrepare() const;
     bool canStart()   const;
@@ -61,10 +67,14 @@ signals:
     void recordingStateChanged(RecordingState newState);
     void languageIndexChanged(int newIndex);
     void modelIndexChanged(int newIndex);
+    void postModelIndexChanged(int newIndex);
     void stateFlagsChanged();
     void partialTextAvailable(const QString &text);
     void errorOccurred(const QString &message);
     void modelDownloadProgress(qint64 bytesReceived, qint64 bytesTotal);
+    void postModelDownloadProgress(qint64 bytesReceived, qint64 bytesTotal);
+    void recordingLevelChanged();
+    void recordedTextChanged();
 
 private:
     RecordingState recordingState() const { return recording_state_; }
@@ -72,6 +82,9 @@ private:
     void createPipelineIfNeeded();
     void prepareTranscriber();
     void onTranscriberPrepared(bool ok, const QString &errorText);
+    void onTranscriberStateChanged();
+    void onPostTranscriberStateChanged();
+    void onFinalRecordingTextAvailable(const QString &text);
 
     AudioController audio_controller_;
     RecordingState recording_state_ = Idle;
@@ -79,9 +92,13 @@ private:
     QStringList model_sizes_;
     int language_index_{0}; // Auto
     int model_index_{};
+    int post_model_index_{};
     QString pcm_file_path_;
-    std::shared_ptr<ChunkQueue> chunk_queue_;
+    std::shared_ptr<chunk_queue_t> chunk_queue_;
     std::shared_ptr<AudioRecorder> recorder_;
     std::shared_ptr<AudioFileWriter> file_writer_;
-    std::shared_ptr<TranscriberWhisper> transcriber_;
+    std::shared_ptr<TranscriberWhisper> rec_transcriber_;
+    std::shared_ptr<TranscriberWhisper> post_transcriber_;
+    qreal recording_level_{};
+    QString current_recorded_text_;
 };

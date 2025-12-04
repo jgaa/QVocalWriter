@@ -61,11 +61,11 @@ qt_add_qml_module(${PROJECT_NAME}
         SOURCES src/AudioRecorder.h src/AudioRecorder.cpp
         SOURCES src/AudioRingBuffer.h src/AudioRingBuffer.cpp
         SOURCES src/AudioCaptureDevice.h src/AudioCaptureDevice.cpp
-        SOURCES src/ChunkQueue.h src/ChunkQueue.cpp
         SOURCES src/AudioFileWriter.h src/AudioFileWriter.cpp
         SOURCES src/Transcriber.h src/Transcriber.cpp
         SOURCES src/TranscriberWhisper.h src/TranscriberWhisper.cpp
         QML_FILES qml/RecordingPane.qml
+        SOURCES src/Queue.h
 )
 
 # Add includepaths

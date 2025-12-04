@@ -5,13 +5,13 @@
 #include <QFile>
 
 #include "AudioRingBuffer.h"
-#include "ChunkQueue.h"
+#include "Queue.h"
 
 class AudioFileWriter
 {
 public:
     AudioFileWriter(AudioRingBuffer *ring,
-                    ChunkQueue *chunkQueue,
+                    chunk_queue_t *chunkQueue,
                     const QString &filePath);
 
     ~AudioFileWriter();
@@ -21,8 +21,8 @@ public:
 private:
     void run();
 
-    AudioRingBuffer *ring_;
-    ChunkQueue      *chunkQueue_;
+    AudioRingBuffer *ring_{};
+    chunk_queue_t *chunkQueue_{};
     QFile            file_;
     std::jthread     thread_;
     std::atomic_bool stopped_{false};

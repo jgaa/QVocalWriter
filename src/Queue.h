@@ -6,28 +6,22 @@
 
 #include <QObject>
 
-struct FileChunk
-{
-    qint64  offset{};   // byte offset in file
-    qsizetype size{};   // length of data segment
-};
-
-
-class ChunkQueue
+template <typename T>
+class Queue
 {
 public:
-    ChunkQueue() = default;
+    Queue() = default;
 
-    void push(const FileChunk &chunk)
+    void push(const T &data)
     {
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            queue_.push_back(chunk);
+            queue_.push_back(data);
         }
         cv_.notify_one();
     }
 
-    bool pop(FileChunk &out)
+    bool pop(T &out)
     {
         std::unique_lock<std::mutex> lock(mutex_);
         cv_.wait(lock, [&]{ return !queue_.empty() || stopped_; });
@@ -38,11 +32,25 @@ public:
         return true;
     }
 
-    void stop();
+    void stop() {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            stopped_ = true;
+        }
+        cv_.notify_all();
+    }
 
 private:
-    std::mutex              mutex_;
+    std::mutex mutex_;
     std::condition_variable cv_;
-    std::deque<FileChunk>   queue_;
-    bool                    stopped_{false};
+    std::deque<T> queue_;
+    bool stopped_{false};
 };
+
+struct FileChunk
+{
+    qint64  offset{};   // byte offset in file
+    qsizetype size{};   // length of data segment
+};
+
+using chunk_queue_t = Queue<FileChunk>;

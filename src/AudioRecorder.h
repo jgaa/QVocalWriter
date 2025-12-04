@@ -30,6 +30,7 @@ public:
     bool isRunning() const noexcept { return state_ == State::STARTED;}
 
     auto * ringBuffer() const noexcept { return ringBuffer_.get(); }
+    auto * captureDevice() const noexcept { return captureDevice_.get(); }
 
 signals:
     void started();

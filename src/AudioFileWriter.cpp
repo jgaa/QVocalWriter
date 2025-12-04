@@ -4,7 +4,7 @@
 
 using namespace std;
 
-AudioFileWriter::AudioFileWriter(AudioRingBuffer *ring, ChunkQueue *chunkQueue, const QString &filePath)
+AudioFileWriter::AudioFileWriter(AudioRingBuffer *ring, chunk_queue_t *chunkQueue, const QString &filePath)
     : ring_(ring),
     chunkQueue_(chunkQueue),
     file_(filePath)
@@ -53,7 +53,7 @@ void AudioFileWriter::run()
             break; // stopped or no more data
         }
 
-        //LOG_TRACE_N << "Writing #" << ++segment << " offset=" << currentOffset << " size=" << chunk.size();
+        LOG_TRACE_N << "Writing #" << ++segment << " offset=" << currentOffset << " size=" << chunk.size();
 
         const qint64 written = file_.write(chunk);
         if (written <= 0) {

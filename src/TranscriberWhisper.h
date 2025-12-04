@@ -1,5 +1,7 @@
 #pragma once
 
+#include <span>
+
 #include <QAudioFormat>
 #include <QNetworkAccessManager>
 #include <QStandardPaths>
@@ -9,16 +11,34 @@
 
 struct whisper_context; // from whisper.cpp (forward-declare)
 
+struct TranscriptSegment {
+    float   start_ms = 0.0f;
+    float   end_ms   = 0.0f;
+    QString text;
+};
+
+
 class TranscriberWhisper final : public Transcriber
 {
 public:
     struct ModelInfo {
-        QString id;          // e.g. "base.en", "small", "tiny.en-q5_1"
-        QString filename;    // e.g. "ggml-base.en.bin"
-        qint64  sizeBytes{};   // approximate, optional
+        enum Quatization {
+            Q4_0,
+            Q4_1,
+            Q5_0,
+            Q5_1,
+            Q8_0,
+            FP16,
+            FP32,
+        };
+        std::string_view id;
+        std::string_view filename;
+        Quatization quantization{};
+        size_t size_mb{};   // approximate in megabytes
+        std::string_view sha;
     };
 
-    TranscriberWhisper(ChunkQueue *queue,
+    TranscriberWhisper(chunk_queue_t *queue,
                        const QString &filePath,
                        QAudioFormat format);
 
@@ -29,13 +49,14 @@ public:
 
     void setModelDirectory(const QString &dir);
 
-    static QVector<ModelInfo> builtinModels();
+    static std::span<const ModelInfo> builtinModels() noexcept;
 
     bool initialized() const noexcept override { return initialized_; }
 
 
 protected:
     void processChunk(std::span<const uint8_t> data, bool lastChunk) override;
+    void processRecording(std::span<const float> data) override;
     bool init() override;
 
 private:
@@ -64,8 +85,8 @@ private:
     // Audio parameters
     int sample_rate_ = 16000; // Hz
     int window_ms_ = 10000; // total buffer span, e.g. 10000 ms
-    float overlap_fraction_ = 0.15F; // 0.0 .. 0.9
-    int min_ms_before_process_ = 1000; // minimum audio before first Whisper call
+    float overlap_fraction_ = 0.30F; // 0.0 .. 0.9
+    int min_ms_before_process_ = 200; // minimum audio before first Whisper call
 
     // Derived / state
     std::vector<float> pcm_; // contiguous sliding window
@@ -76,10 +97,13 @@ private:
     float last_emitted_end_time_ms_ = 0.0f; // last segment end time we emitted
 
     // Transcript accumulation
-    QString m_stableTranscript;     // committed text, won't be changed again
-    float   m_stableUntilMs = 0.0f; // global time up to which text is stable
+    QString final_text_;
+    float   stable_until_ms_ = 0.0f; // global time up to which text is stable
 
     // streaming config
-    float   m_unstableMarginMs = 1000.0f; // last 1000 ms are "unstable" tail
+    float unstable_margin_ms_ = 1500.0f; // last 1000 ms are "unstable" tail
+    float last_seen_ms_ = 0.0f; // last time we saw in the audio
+
+    QVector<TranscriptSegment> segments_;
 
 };
