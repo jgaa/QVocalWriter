@@ -66,6 +66,8 @@ qt_add_qml_module(${PROJECT_NAME}
         SOURCES src/TranscriberWhisper.h src/TranscriberWhisper.cpp
         QML_FILES qml/RecordingPane.qml
         SOURCES src/Queue.h
+        SOURCES src/Model.h src/Model.cpp
+        SOURCES src/ModelLocator.h src/ModelLocator.cpp
 )
 
 # Add includepaths

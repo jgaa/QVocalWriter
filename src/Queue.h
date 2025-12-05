@@ -10,6 +10,8 @@ template <typename T>
 class Queue
 {
 public:
+    using type_t = T;
+
     Queue() = default;
 
     void push(const T &data)
