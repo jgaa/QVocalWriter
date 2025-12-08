@@ -36,9 +36,17 @@ set(GGML_METAL      OFF CACHE BOOL "" FORCE)
 set(GGML_OPENBLAS   OFF CACHE BOOL "" FORCE)
 set(GGML_BLAS       OFF CACHE BOOL "" FORCE)
 
-FetchContent_MakeAvailable(logfault_src whisper_cpp)
+# QCoro (coroutines for Qt5/Qt6)
+FetchContent_Declare(
+  qcoro
+  GIT_REPOSITORY https://github.com/qcoro/qcoro.git
+  GIT_TAG v0.12.0
+)
+
+FetchContent_MakeAvailable(logfault_src whisper_cpp qcoro)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Quick Qml Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Core)
 
 qt_standard_project_setup(REQUIRES 6.4)
 
@@ -47,6 +55,8 @@ qt_add_executable(${PROJECT_NAME}
     src/logging.h
 )
 
+
+target_link_libraries(QVocalWriter PRIVATE Qt6::Core)
 set(QML_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -55,19 +65,35 @@ qt_add_qml_module(${PROJECT_NAME}
     URI ${PROJECT_NAME}
     VERSION 1.0
     QML_FILES
-        qml/Main.qml
-        SOURCES src/AudioController.h src/AudioController.cpp
-        SOURCES src/AppEngine.h src/AppEngine.cpp
-        SOURCES src/AudioRecorder.h src/AudioRecorder.cpp
-        SOURCES src/AudioRingBuffer.h src/AudioRingBuffer.cpp
-        SOURCES src/AudioCaptureDevice.h src/AudioCaptureDevice.cpp
-        SOURCES src/AudioFileWriter.h src/AudioFileWriter.cpp
-        SOURCES src/Transcriber.h src/Transcriber.cpp
-        SOURCES src/TranscriberWhisper.h src/TranscriberWhisper.cpp
-        QML_FILES qml/RecordingPane.qml
-        SOURCES src/Queue.h
-        SOURCES src/Model.h src/Model.cpp
-        SOURCES src/ModelLocator.h src/ModelLocator.cpp
+        QML_FILES
+            qml/RecordingPane.qml
+            qml/Main.qml
+        SOURCES
+            src/AppEngine.cpp
+            src/AppEngine.h
+            src/AudioCaptureDevice.cpp
+            src/AudioCaptureDevice.h
+            src/AudioController.cpp
+            src/AudioController.h
+            src/AudioFileWriter.cpp
+            src/AudioFileWriter.h
+            src/AudioRecorder.cpp
+            src/AudioRecorder.h
+            src/AudioRingBuffer.cpp
+            src/AudioRingBuffer.h
+            src/Model.cpp
+            src/Model.h
+            src/ModelInfo.h
+            src/ModelMgr.cpp
+            src/ModelMgr.h
+            src/Queue.h
+            src/ScopedTimer.h
+            src/Transcriber.cpp
+            src/Transcriber.h
+            src/TranscriberWhisper.cpp
+            src/TranscriberWhisper.h
+            src/WhisperInstance.cpp
+            src/WhisperInstance.h
 )
 
 # Add includepaths
@@ -85,7 +111,10 @@ target_link_libraries(${PROJECT_NAME}
         logfault::logfault
         #whisper_cpp::whisper_cpp
         whisper
+        QCoro6::Core
+        QCoro6::Network
 )
+
 target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Core)
 target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Core)
 target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Core)

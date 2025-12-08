@@ -9,127 +9,177 @@
 
 using namespace std;
 
-std::ostream& operator<<(std::ostream &os, Transcriber::State state) {
-    constexpr auto states = to_array<string_view>({string_view("CREATED"),
-                                                      string_view("STARTED"),
-                                                      string_view("INIT"),
-                                                      string_view("READY"),
-                                                      string_view("TRANSACRIBING"),
-                                                      string_view("POST_TRANSCRIBING"),
-                                                      string_view("STOPPING"),
-                                                      string_view("STOPPED"),
-                                                      string_view("ERROR")});
+// std::ostream& operator<<(std::ostream &os, Transcriber::State state) {
+//     constexpr auto states = to_array<string_view>({string_view("CREATED"),
+//                                                       string_view("STARTED"),
+//                                                       string_view("INIT"),
+//                                                       string_view("READY"),
+//                                                       string_view("TRANSACRIBING"),
+//                                                       string_view("POST_TRANSCRIBING"),
+//                                                       string_view("STOPPING"),
+//                                                       string_view("STOPPED"),
+//                                                       string_view("ERROR")});
 
-    return os << states.at(static_cast<size_t>(state));
-}
+//     return os << states.at(static_cast<size_t>(state));
+// }
 
-Transcriber::Transcriber(chunk_queue_t *queue, const QString &filePath, QAudioFormat format)
-: queue_(queue), file_(filePath), format_(format)
+// Transcriber::Transcriber(chunk_queue_t *queue, const QString &filePath, QAudioFormat format)
+// : queue_(queue), file_(filePath), format_(format)
+// {
+//     if (!file_.open(QIODevice::ReadOnly)) {
+//         LOG_ERROR_N << "Failed to open file for writing: " << filePath.toStdString();
+//         throw runtime_error("Failed to open file for writing");
+//         return;
+//     }
+
+//     thread_ = std::jthread([this] { run(); });
+// }
+
+// void Transcriber::stop() {
+//     setState(State::STOPPING);
+//     enqueueCommand(CmdType::Exit);
+//     if (thread_ && thread_->joinable()) {
+//         LOG_TRACE_N << "Waiting for transcriber thread to join...";
+//         thread_->join();
+//         LOG_TRACE_N << "Transcriber thread joined.";
+//     }
+// }
+
+// void Transcriber::setState(State newState) {
+//     if (state_ == State::ERROR) {
+//         LOG_DEBUG_N << "Transcriber is in ERROR state, ignoring state change to "
+//                     << newState;
+//         return;
+//     }
+
+//     if (state_ != newState) {
+//         LOG_DEBUG_N << "Transcriber state changed from " << state_.load()
+//                     << " to " << newState;
+//         state_ = newState;
+//         emit stateChanged();
+//     }
+// }
+
+// void Transcriber::run() {
+//     setState(State::STARTED);
+//     while(state() < State::STOPPING) {
+//         LOG_DEBUG_N << "waiting for command...";
+//         CmdType ct{};
+//         cmdQueue_.pop(ct);
+
+//         LOG_DEBUG_N << "received command " << static_cast<int>(ct);
+
+//         switch(ct) {
+//         case CmdType::Prepare:
+//             LOG_DEBUG_N << "initializing...";
+//             setState(State::INIT);
+//             try {
+//                 if (!init()) {
+//                     LOG_ERROR_N << "initialization failed";
+//                     emit errorOccurred("Transcriber initialization failed");
+//                     setState(State::ERROR);
+//                     return;
+//                 }
+//                 setState(State::READY);
+//             } catch (const exception& ex) {
+//                 LOG_ERROR_N << "Transcriber:    exception during initialization: " << ex.what();
+//                 emit errorOccurred(QString("Transcriber: exception during initialization: %1").arg(ex.what()));
+//             }
+//             break;
+
+//         case CmdType::TranscribeChunks:
+//             LOG_DEBUG_N << "starting transcription session...";
+//             setState(State::TRANSACRIBING);
+//             try {
+//                 if (!transcribeSegments()) {
+//                     setState(State::ERROR);
+//                 } else {
+//                     setState(State::READY);
+//                 }
+//             } catch (const exception& ex) {
+//                 LOG_ERROR_N << "exception during transcription: " << ex.what();
+//                 result_ = false;
+//                 emit errorOccurred(QString("Transcriber: exception during transcription: %1").arg(ex.what()));
+//                 setState(State::ERROR);
+//             }
+//             break;
+
+//         case CmdType::PostTranscribe:
+//             LOG_DEBUG_N << "Starting post-transcribing the complete recording...";
+//             setState(State::POST_TRANSCRIBING);
+//             try {
+//                 processRecordingFromFile();
+//                 setState(State::READY);
+//             } catch (const exception& ex) {
+//                 LOG_ERROR_N << "exception during post-transcription: " << ex.what();
+//                 result_ = false;
+//                 emit errorOccurred(QString("Transcriber: exception during post-transcription: %1").arg(ex.what()));
+//                 setState(State::ERROR);
+//             }
+//             break;
+
+//         case CmdType::Exit:
+//             LOG_DEBUG_N << "exiting...";
+//             setState(State::STOPPING);
+//             cmdQueue_.stop();
+//         }
+//     }
+
+//     setState(State::STOPPED);
+// }
+
+Transcriber::Transcriber(std::unique_ptr<Config> && config,
+                         chunk_queue_t *queue,
+                         const QString &pcmFilePath,
+                         QAudioFormat format)
+    : Model(std::move(config)), queue_(queue), file_(pcmFilePath), format_(format)
 {
-    if (!file_.open(QIODevice::ReadOnly)) {
-        LOG_ERROR_N << "Failed to open file for writing: " << filePath.toStdString();
-        throw runtime_error("Failed to open file for writing");
-        return;
-    }
 
-    thread_ = std::jthread([this] { run(); });
 }
 
-void Transcriber::stop() {
-    setState(State::STOPPING);
-    enqueueCommand(CmdType::Exit);
-    if (thread_ && thread_->joinable()) {
-        LOG_TRACE_N << "Waiting for transcriber thread to join...";
-        thread_->join();
-        LOG_TRACE_N << "Transcriber thread joined.";
-    }
+QCoro::Task<bool> Transcriber::transcribeChunks()
+{
+    auto op = make_unique<Model::Operation>([this]() -> bool {
+        return transcribeSegments();
+    });
+
+    auto future = op->future();
+
+    LOG_TRACE_N << "Enqueuing TranscribeChunks command...";
+    enqueueCommand(std::move(op));
+    const auto result = co_await future;
+    LOG_TRACE_N << "TranscribeChunks command completed.";
+    co_return result;
 }
 
-void Transcriber::setState(State newState) {
-    if (state_ == State::ERROR) {
-        LOG_DEBUG_N << "Transcriber is in ERROR state, ignoring state change to "
-                    << newState;
-        return;
-    }
+QCoro::Task<bool> Transcriber::transcribeRecording()
+{
+    auto op = make_unique<Model::Operation>([this]() -> bool {
+        processRecordingFromFile();
+        return true;
+    });
 
-    if (state_ != newState) {
-        LOG_DEBUG_N << "Transcriber state changed from " << state_.load()
-                    << " to " << newState;
-        state_ = newState;
-        emit stateChanged();
-    }
+    auto future = op->future();
+
+    LOG_TRACE_N << "Enqueuing TranscribeRecording command...";
+    enqueueCommand(std::move(op));
+    const auto result = co_await future;
+    LOG_TRACE_N << "TranscribeRecording command completed.";
+    co_return result;
 }
 
-void Transcriber::run() {
-    setState(State::STARTED);
-    while(state() < State::STOPPING) {
-        LOG_DEBUG_N << "waiting for command...";
-        CmdType ct{};
-        cmdQueue_.pop(ct);
-
-        LOG_DEBUG_N << "received command " << static_cast<int>(ct);
-
-        switch(ct) {
-        case CmdType::Prepare:
-            LOG_DEBUG_N << "initializing...";
-            setState(State::INIT);
-            try {
-                if (!init()) {
-                    LOG_ERROR_N << "initialization failed";
-                    emit errorOccurred("Transcriber initialization failed");
-                    setState(State::ERROR);
-                    return;
-                }
-                setState(State::READY);
-            } catch (const exception& ex) {
-                LOG_ERROR_N << "Transcriber:    exception during initialization: " << ex.what();
-                emit errorOccurred(QString("Transcriber: exception during initialization: %1").arg(ex.what()));
-            }
-            break;
-
-        case CmdType::TranscribeChunks:
-            LOG_DEBUG_N << "starting transcription session...";
-            setState(State::TRANSACRIBING);
-            try {
-                if (!transcribeSegments()) {
-                    setState(State::ERROR);
-                } else {
-                    setState(State::READY);
-                }
-            } catch (const exception& ex) {
-                LOG_ERROR_N << "exception during transcription: " << ex.what();
-                result_ = false;
-                emit errorOccurred(QString("Transcriber: exception during transcription: %1").arg(ex.what()));
-                setState(State::ERROR);
-            }
-            break;
-
-        case CmdType::PostTranscribe:
-            LOG_DEBUG_N << "Starting post-transcribing the complete recording...";
-            setState(State::POST_TRANSCRIBING);
-            try {
-                processRecordingFromFile();
-                setState(State::READY);
-            } catch (const exception& ex) {
-                LOG_ERROR_N << "exception during post-transcription: " << ex.what();
-                result_ = false;
-                emit errorOccurred(QString("Transcriber: exception during post-transcription: %1").arg(ex.what()));
-                setState(State::ERROR);
-            }
-            break;
-
-        case CmdType::Exit:
-            LOG_DEBUG_N << "exiting...";
-            setState(State::STOPPING);
-            cmdQueue_.stop();
-        }
-    }
-
-    setState(State::STOPPED);
+const string &Transcriber::language() const noexcept
+{
+    return config().from_language;
 }
+
 
 bool Transcriber::transcribeSegments()
 {
+    // Assumed to run in worker_ thread
+    assert(worker());
+    assert(this_thread::get_id() == worker()->get_id());
+
     assert(file_.isOpen());
     if (!file_.isOpen()) {
         LOG_ERROR_N << "Transcriber: file not open";
@@ -139,7 +189,7 @@ bool Transcriber::transcribeSegments()
     FileChunk fc;
     auto segment = 0u;
 
-    while(state_.load() == State::TRANSACRIBING) {
+    while(!cancelled()) {
         if (!queue_->pop(fc)) {
             LOG_DEBUG_N << "Transcriber: queue stopped or empty";
 

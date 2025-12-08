@@ -3,6 +3,8 @@
 #include <QObject>
 #include <QQmlComponent>
 
+#include <qcorotask.h>
+
 #include "AudioController.h"
 #include "Queue.h"
 
@@ -10,6 +12,7 @@ class AudioRecorder;
 class AudioFileWriter;
 class Transcriber;         // base class
 class TranscriberWhisper;  // concrete class
+class ModelMgr;
 
 class AppEngine : public QObject
 {
@@ -36,6 +39,7 @@ public:
         Recording,
         Processing,
         Done,
+        Resetting,
         Error
     };
     Q_ENUM(RecordingState)
@@ -45,7 +49,7 @@ public:
     Q_INVOKABLE void setLanguageIndex(int index);
     Q_INVOKABLE void startRecording();
     Q_INVOKABLE void stopRecording();
-    Q_INVOKABLE void prepare();
+    Q_INVOKABLE void prepareForRecording();
     Q_INVOKABLE void saveTranscriptToFile(const QUrl &path);
     Q_INVOKABLE void reset();
 
@@ -80,11 +84,17 @@ private:
     RecordingState recordingState() const { return recording_state_; }
     void setRecordingState(RecordingState newState);
     void createPipelineIfNeeded();
-    void prepareTranscriber();
-    void onTranscriberPrepared(bool ok, const QString &errorText);
-    void onTranscriberStateChanged();
-    void onPostTranscriberStateChanged();
+    QCoro::Task<void> startPrepareForRecording();
+    QCoro::Task<bool> prepareTranscriberModels();
+    QCoro::Task<std::shared_ptr<Transcriber>> prepareModel(std::string_view modelId, std::string_view language, bool loadModel, bool submitFilalText);
+    // void prepareTranscriber();
+    // void onTranscriberPrepared(bool ok, const QString &errorText);
+    // void onPostTranscriberStateChanged();
     void onFinalRecordingTextAvailable(const QString &text);
+    QCoro::Task<void> transcribeChunks();
+    QCoro::Task<void> onRecordingDone();
+    bool failed(const QString& why);
+    QCoro::Task<void> doReset();
 
     AudioController audio_controller_;
     RecordingState recording_state_ = Idle;
@@ -97,8 +107,11 @@ private:
     std::shared_ptr<chunk_queue_t> chunk_queue_;
     std::shared_ptr<AudioRecorder> recorder_;
     std::shared_ptr<AudioFileWriter> file_writer_;
-    std::shared_ptr<TranscriberWhisper> rec_transcriber_;
-    std::shared_ptr<TranscriberWhisper> post_transcriber_;
+    std::shared_ptr<Transcriber> rec_transcriber_;
+    std::shared_ptr<Transcriber> post_transcriber_;
+    std::shared_ptr<ModelMgr> model_mgr_;
     qreal recording_level_{};
     QString current_recorded_text_;
 };
+
+std::ostream& operator << (std::ostream& os, AppEngine::RecordingState state);

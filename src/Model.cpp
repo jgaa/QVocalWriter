@@ -1,15 +1,15 @@
 
 #include <array>
 #include <string_view>
-#include <filesystem>
 
 #include <QDir>
 #include <QStandardPaths>
 #include <QNetworkReply>
 #include <QEventLoop>
 
-#include "Model.h"
+#include <qcorosignal.h>
 
+#include "Model.h"
 #include "logging.h"
 
 using namespace std;
@@ -19,8 +19,9 @@ std::ostream& operator << (std::ostream& os, Model::State state) {
     constexpr auto states = to_array<string_view>({
         "CREATED",
         "RUNNING",
-        "DOWNLOADING",
+        "PREPARING",
         "LOADING",
+        "LOADED",
         "READY",
         "WORKING",
         "STOPPING",
@@ -33,8 +34,6 @@ std::ostream& operator << (std::ostream& os, Model::State state) {
 
 std::ostream& operator<<(std::ostream &os, Model::CmdType cmd) {
     constexpr auto cmds = to_array<string_view>({
-        "DOWNLOAD_MODEL",
-        "LOAD_MODEL",
         "CREATE_CONTEXT",
         "COMMAND",
         "EXIT"
@@ -43,12 +42,12 @@ std::ostream& operator<<(std::ostream &os, Model::CmdType cmd) {
     return os << cmds.at(static_cast<size_t>(cmd));
 }
 
-std::ostream& operator<<(std::ostream &os, Model::Operation op) {
+std::ostream& operator<<(std::ostream &os, const Model::Operation& op) {
     return os << op.op();
 }
 
-Model::Model(const Model::Config *config)
-    : config_(config)
+Model::Model(std::unique_ptr<Model::Config> && config)
+    : config_{std::move(config)}
 {
     assert(config_);
     worker_ = std::jthread([this] { run(); });
@@ -57,52 +56,100 @@ Model::Model(const Model::Config *config)
 Model::~Model()
 {
     stop();
+
+    if (is_loaded_) {
+        if (model_instance_) {
+            model_instance_->unloadNow(); // non-coroutine version
+        }
+        is_loaded_ = false;
+    }
 }
 
-void Model::prepareModel()
+QCoro::Task<bool> Model::init(const QString &modelId)
 {
-    if (auto model = findBestModel()) {
-        LOG_INFO_N << "Preparing model: " << model->id;
-        model_path_ = findModelPath(model.value());
-        setModel(model.value());
-
-        // See if the model is already downloaded
-        if (QFile::exists(model_path_)) {
-            LOG_INFO_N << "Model file exists at: " << model_path_;
-            have_model_ = true;
-            return;
-        }
-
-        LOG_INFO_N << "Model file '" << model->filename << "' not found locally, downloading...";
-        setState(State::DOWNLOADING);
-        enqueueCommand(std::make_unique<Operation>(CmdType::DOWNLOAD_MODEL));
-        return;
+    assert(!haveModel());
+    setState(State::PREPARING);
+    model_instance_ = co_await ModelMgr::instance().getInstance(kind(), modelId);
+    if (model_instance_ == nullptr) {
+        failed(tr("Failed to get model instance for id: %1").arg(modelId));
+        co_return false;
     }
 
-    failed("Could not find suitable model for name: " + QString::fromStdString(config().model_name));
+    setState(State::READY);
+    co_return true;
 }
 
-void Model::loadModel()
+QCoro::Task<bool> Model::loadModel()
 {
-    assert(have_model_);
+    assert(haveModel());
+    assert(!is_loaded_);
+
     setState(State::LOADING);
-    enqueueCommand(std::make_unique<Operation>(CmdType::LOAD_MODEL));
+    const bool ok = co_await model_instance_->load();
+    if (!ok) {
+        failed(tr("Failed to load model: %1").arg(model_instance_->modelId()));
+        co_return false;
+    }
+
+    if (!createContextImpl()) {
+        failed(tr("Failed to create context on the model"));
+        co_return false;
+    }
+
+    // Relay signals
+    connect(model_instance_.get(), &ModelInstanceBase::modelReady,
+            this, &Model::modelReady);
+    connect(model_instance_.get(), &ModelInstanceBase::partialTextAvailable,
+            this, &Model::partialTextAvailable);
+
+    if (config().submit_filal_text) {
+        connect(model_instance_.get(), &ModelInstanceBase::finalTextAvailable,
+                this, &Model::finalTextAvailable);
+    }
+
+    setState(State::LOADED);
+    is_loaded_ = true;
+    co_return true;
+}
+
+QCoro::Task<void> Model::stop()
+{
+    if(state() < State::STOPPING) {
+        LOG_DEBUG_N << "Stopping model...";
+        enqueueCommand(std::make_unique<Operation>(CmdType::EXIT));
+    }
+
+    // Wait for the stopped signal
+    LOG_DEBUG_N << "Waiting for model to stop...";
+    co_await qCoro(this, &Model::stopped);
+
+    // Join the thread
+    if (worker_ && worker_->joinable()) {
+        LOG_DEBUG_N << "Waiting for model worker thread to join...";
+        worker_->join();
+        LOG_DEBUG_N << "Model worker thread joined.";
+    }
+
+    co_return;
 }
 
 void Model::setState(State state)
 {
     if(state_ != state) {
-        LOG_DEBUG_N << "Model state changed from " << state_ << " to " << state;
+        LOG_DEBUG_N << "Model state for "
+                    << config().model_name
+                    <<" changed from " << state_ << " to " << state;
         state_ = state;
         emit stateChanged();
     }
 }
 
-void Model::failed(QString message)
+bool Model::failed(QString message)
 {
     LOG_WARN_N << "Model failed: " << message.toStdString();
     setState(State::ERROR);
     emit errorOccurred(message);
+    return false;
 }
 
 void Model::enqueueCommand(std::unique_ptr<Operation> &&op)
@@ -134,130 +181,48 @@ void Model::run() noexcept
         const auto op_type = op->op();
         try {
             switch(op_type) {
-                case CmdType::DOWNLOAD_MODEL:
-                    downloadModel(model());
-                    break;
-                case CmdType::LOAD_MODEL:
-                    loadModelImpl();
-                    break;
-                case CmdType::CREATE_CONTEXT:
-                    createContextImpl();
-                    break;
+            case CmdType::CREATE_CONTEXT: {
+                    const auto result = createContextImpl();
+                    op->setResult(result);
+                } break;
                 case CmdType::COMMAND:
-                    onCommand(*op);
+                    // Execute will set the result
+                    op->execute();
                     break;
                 case CmdType::EXIT:
                     LOG_DEBUG_N << "Exit command received, stopping model...";
                     setState(State::STOPPING);
-                    stopImpl();
+
+                    // TODO: Implement and set the correct restlt
+                    //stopImpl();
+                    op->setResult(true);
                     break;
                 default:
                     LOG_WARN_N << "Unknown command received.";
+                    op->setResult(false);
                     break;
             }
         } catch (const exception& ex) {
             failed(tr("Caught exception in command loop: %1").arg(ex.what()));
         }
     }
+
+    emit stopped();
 }
 
-std::optional<ModelInfo> Model::findBestModel()
+
+void Model::Operation::execute() noexcept
 {
-    optional<ModelInfo> rval;
-    const auto models = config().models;
-    for (const auto &m : models) {
-        // Strip off quantization suffix for matching
-        auto base_name = m.id;
-        if (auto pos = base_name.find('-'); pos != std::string_view::npos) {
-            base_name = base_name.substr(0, pos);
-        }
-        if (base_name == config().model_name) {
-            if (rval) {
-                if (m.quantization == ModelInfo::Quatization::Q5_1) {
-                    rval = m;
-                } else if (rval->quantization != ModelInfo::Quatization::Q5_1
-                           && m.quantization == ModelInfo::Quatization::Q5_0) {
-                    rval = m;
-                } else if ((rval->quantization != ModelInfo::Quatization::Q5_1
-                            && rval->quantization != ModelInfo::Quatization::Q5_1)
-                           && rval->quantization < m.quantization) {
-                    // prefer higher-quality quantization, unless we have Q5_1/Q5_0
-                    rval = m;
-                }
-            } else {
-                rval = m;
-            }
-        }
-    }
-
-    LOG_TRACE_N  << "Best model lookup for '" << config().model_name
-                 << "' found: "
-                 << (rval ? rval->id : "none");
-
-    return rval;
-}
-
-QString Model::findModelPath(const ModelInfo &modelInfo) const
-{
-    filesystem::path model_dir =  QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation).toStdString();
-    model_dir /= modelPathPostfix();
-
-    if (!filesystem::is_directory(model_dir)) {
-        LOG_INFO_N << "Creating model directory: " << model_dir;
-        filesystem::create_directories(model_dir);
-    }
-
-    const auto file_path = model_dir / modelInfo.filename;
-    return QString::fromStdString(file_path.string());
-}
-
-void Model::downloadModel(const ModelInfo &model)
-{
-    if (!nam_) {
-        nam_ = new QNetworkAccessManager(this);
-    }
-
-    const QUrl url{QStringLiteral("%1/%1").arg(config().url_base).arg(model.filename)};
-
-    LOG_INFO_N << "Downloading model " << model.id << " from " << url.toString();
-
-    QNetworkRequest req(url);
-    auto reply = nam_->get(req);
-
-    QEventLoop loop;
-    QObject::connect(reply, &QNetworkReply::downloadProgress,
-                     [this] (qint64 bytesReceived, qint64 bytesTotal) {
-
-                         LOG_TRACE_N << "Model download progress: "
-                                     << bytesReceived << " / " << bytesTotal;
-
-                         emit modelDownloadProgress(bytesReceived, bytesTotal);
-                     });
-
-    QObject::connect(reply, &QNetworkReply::finished,
-                     &loop, &QEventLoop::quit);
-
-    loop.exec(); // blocks this thread until finished
-
-    reply->deleteLater();
-
-    if (reply->error() != QNetworkReply::NoError) {
-        failed(tr("Failed to download model: %1").arg(reply->errorString()));
-        return;
-    }
-
-    const QByteArray data = reply->readAll();
-    assert(!model_path_.isEmpty());
-    {
-        QFile out(model_path_);
-        if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-            failed(tr("Failed to save model to %1").arg(model_path_));
+    try {
+        if (fn_) {
+            const bool res = fn_();
+            setResult(res);
             return;
         }
-        out.write(data);
-        out.close();
-    }
 
-    emit modelReady();
-    have_model_ = true;
+        setResult(true);
+    } catch (const exception& ex) {
+        setResult(false);
+        LOG_WARN_N << "Exception during operation execution: " << ex.what();
+    }
 }

@@ -53,16 +53,16 @@ void AudioRecorder::stop()
 
 QAudioFormat AudioRecorder::createWhisperFormat(const QAudioDevice &device)
 {
-    QAudioFormat format;
-    format.setSampleRate(16000);                 // or 16000/24000/48000
-    format.setChannelCount(1);                   // mono
-    format.setSampleFormat(QAudioFormat::Int16); // 16-bit signed PCM
+    QAudioFormat fmt    ;
+    fmt.setSampleRate(16000);                 // or 16000/24000/48000
+    fmt.setChannelCount(1);                   // mono
+    fmt.setSampleFormat(QAudioFormat::Int16); // 16-bit signed PCM
 
-    if (!device.isFormatSupported(format)) {
+    if (!device.isFormatSupported(fmt)) {
         LOG_WARN_N << "Requested format not supported, using nearest";
-        format = device.preferredFormat();
+        fmt = device.preferredFormat();
     }
-    return format;
+    return fmt;
 }
 
 void AudioRecorder::setState(State state)

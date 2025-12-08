@@ -5,33 +5,32 @@
 #include <thread>
 #include <chrono>
 #include <span>
+#include <optional>
 
-#include "Queue.h"
 
 #include <QObject>
 #include <QThread>
 #include <QNetworkAccessManager>
+#include <QFuture>
 
-#include "ModelLocator.h"
+#include <qcorotask.h>
+#include <qcoro/core/qcorofuture.h>
 
-struct ModelInfo {
-    enum Quatization {
-        Q4_0,
-        Q4_1,
-        Q5_0,
-        Q5_1,
-        Q8_0,
-        FP16,
-        FP32,
-    };
-    std::string_view id;
-    std::string_view filename;
-    Quatization quantization{};
-    size_t size_mb{};   // approximate in megabytes
-    std::string_view sha;
-};
+#include "Queue.h"
+#include "ModelMgr.h"
 
-using model_list_t = std::span<const ModelInfo>;
+
+/*! Base-class for model handling
+ *
+ *  The actual LLM models are handled by ModelMgr, and this class
+ *  works with contexts for specific models.
+ *
+ *  Each instance or a Model has it's own worker thread for interacting with the
+ *  model engine (whisper.cpp, llama.cpp, etc).
+ *
+ *  The interaction with the context is handled by subclasses that implement
+ *  the pure virtual methods.
+ */
 
 class Model : public QObject
 {
@@ -40,15 +39,12 @@ class Model : public QObject
 public:
     struct Config {
         std::string model_name;
-        model_list_t models;
+        std::string from_language;
         bool submit_filal_text{true};
-        std::string url_base{}; // https://huggingface.co/ggerganov/whisper.cpp/resolve/main
     };
 
     // Command types for worker thread
     enum class CmdType {
-        DOWNLOAD_MODEL,
-        LOAD_MODEL,
         CREATE_CONTEXT,
         COMMAND,
         EXIT
@@ -56,13 +52,43 @@ public:
 
     class Operation {
     public:
-        Operation(CmdType type = CmdType::COMMAND) : type_(type) {}
-        virtual ~Operation() = default;
+        using fn_t = std::function<bool()> ;
+        Operation(CmdType type = CmdType::COMMAND)
+            : type_{type} {}
+
+        Operation(fn_t && fn, CmdType type = CmdType::COMMAND)
+            : type_{type}, fn_{std::move(fn)}  {}
+
+        ~Operation() {
+            setResult(false); // If not set to true, default to false.
+        }
+
+        Operation(const Operation&) = delete;
+        Operation& operator=(const Operation&) = delete;
+        Operation(Operation&&) = delete;
+        Operation& operator=(Operation&&) = delete;
 
         CmdType op() const noexcept { return type_; }
 
+        virtual void execute() noexcept;
+
+        void setResult(bool ok) {
+            std::call_once(promise_set_, [this, ok]() {
+                promise_.start();
+                promise_.addResult(ok);
+                promise_.finish();
+            });
+        }
+
+        QFuture<bool> future() noexcept {
+            return promise_.future();
+        }
+
     private:
+        QPromise<bool> promise_;
+        std::once_flag promise_set_;
         CmdType type_;
+        fn_t fn_;
         std::chrono::steady_clock::time_point timestamp_{std::chrono::steady_clock::now()};
         std::chrono::steady_clock::time_point timestamp_start_;
         std::chrono::steady_clock::time_point timestamp_end_;
@@ -73,8 +99,9 @@ public:
     enum class State {
         CREATED,
         RUNNING,
-        DOWNLOADING,
+        PREPARING,
         LOADING,
+        LOADED,
         READY,
         WORKING,
         STOPPING,
@@ -82,24 +109,25 @@ public:
         ERROR
     };
 
-    Model(const Config* config);
+    Model(std::unique_ptr<Config> &&config);
     virtual ~Model();
 
-    QList<ModelInfo> listAvailableModels() const;
-    void prepareModel();
-    void loadModel();
+    Model(const Model&) = delete;
+    Model& operator=(const Model&) = delete;
+    Model(const Model&&) = delete;
+    Model& operator=(const Model&&) = delete;
+
+    virtual ModelKind kind() const noexcept  = 0;
+    QCoro::Task<bool> init(const QString &modelId);
+    QCoro::Task<bool> loadModel();
+    //QCoro::Task<bool> unloadModel();
 
     void cancel();
     void reset();
-    void stop(); // blocking on thread join
+    QCoro::Task<void> stop();
 
     bool cancelled() const noexcept { return state() >= State::STOPPING;}
-    bool haveModel() const noexcept { return have_model_; }
-    ModelInfo model() const noexcept {
-        std::lock_guard lock{mutex_};
-        assert(model_.has_value());
-        return model_.value();
-    }
+    bool haveModel() const noexcept { return model_instance_ != nullptr; }
     State state() const noexcept {return state_.load();}
 
     const Config& config() const noexcept {
@@ -107,17 +135,20 @@ public:
         return *config_;
     }
 
+    std::shared_ptr<ModelInstanceBase> modelInstance() const noexcept {
+        return model_instance_;
+    }
+
+    const auto& worker() const noexcept {
+        return worker_;
+    }
+
 protected:
     void setState(State state);
-    void failed(QString message);
+    bool failed(QString message);
     void enqueueCommand(std::unique_ptr<Operation> && op);
 
-    virtual void loadModelImpl() = 0;
-    //virtual void unloadModelImpl() = 0;
-    virtual void createContextImpl() = 0;
-    virtual void onCommand(const Operation& op) = 0;
-    virtual void stopImpl() = 0;
-    virtual std::string_view modelPathPostfix() const noexcept = 0;
+    virtual bool createContextImpl() = 0;
 
 signals:
     void partialTextAvailable(const QString &text);
@@ -126,30 +157,21 @@ signals:
     void modelReady();
     void errorOccurred(const QString &message);
     void stateChanged();
+    void stopped();
 
 private:
     void run() noexcept;
-    std::optional<ModelInfo> findBestModel();
-    QString findModelPath(const ModelInfo &modelInfo) const;
-    void downloadModel(const ModelInfo &model);
 
-    void setModel(ModelInfo model) noexcept {
-        std::lock_guard lock{mutex_};
-        model_ = model;
-    }
-
-    const Config *config_{};
+    std::unique_ptr<Config> config_;
+    std::shared_ptr<ModelInstanceBase> model_instance_;
     std::atomic<State> state_{State::CREATED};
     std::optional<std::jthread> worker_;
     cmd_queue_t cmd_queue_;
-    QString model_path_;
-    std::optional<ModelInfo> model_;
-    QNetworkAccessManager *nam_ = nullptr;
     std::mutex mutex_;
-    std::atomic_bool have_model_{false};
     std::atomic_bool have_context_{false};
+    std::atomic_bool is_loaded_{false};
 };
 
 
 std::ostream& operator << (std::ostream& os, Model::State state);
-std::ostream& operator<<(std::ostream &os, Model::Operation op);
+std::ostream& operator<<(std::ostream &os, const Model::Operation& op);

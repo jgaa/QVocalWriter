@@ -63,6 +63,6 @@ void AudioFileWriter::run()
 
         FileChunk fc{ currentOffset, static_cast<qsizetype>(written) };
         currentOffset += written;
-        chunkQueue_->push(fc);
+        chunkQueue_->push(std::move(fc));
     }
 }

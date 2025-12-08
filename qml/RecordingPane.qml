@@ -98,7 +98,7 @@ Item {
             Layout.fillWidth: true
             text: qsTr("Prepare")
             enabled: appEngine.canPrepare
-            onClicked: appEngine.prepare()
+            onClicked: appEngine.prepareForRecording()
         }
 
         RowLayout {

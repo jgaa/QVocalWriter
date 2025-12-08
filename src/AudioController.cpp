@@ -3,11 +3,8 @@
 
 
 AudioController::AudioController(QObject *parent)
-    : QObject(parent)
+    : QObject(parent), m_inputDevice{QMediaDevices::defaultAudioInput()}
 {
-    // Default input device
-    m_inputDevice = QMediaDevices::defaultAudioInput();
-
     LOG_DEBUG_N << "Available audio input devices: ";
     printDevices();
 

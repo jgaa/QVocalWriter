@@ -9,7 +9,7 @@
 
 #include "Transcriber.h"
 
-struct whisper_context; // from whisper.cpp (forward-declare)
+#include "WhisperInstance.h"
 
 struct TranscriptSegment {
     float   start_ms = 0.0f;
@@ -21,66 +21,33 @@ struct TranscriptSegment {
 class TranscriberWhisper final : public Transcriber
 {
 public:
-    struct ModelInfo {
-        enum Quatization {
-            Q4_0,
-            Q4_1,
-            Q5_0,
-            Q5_1,
-            Q8_0,
-            FP16,
-            FP32,
-        };
-        std::string_view id;
-        std::string_view filename;
-        Quatization quantization{};
-        size_t size_mb{};   // approximate in megabytes
-        std::string_view sha;
-    };
-
-    TranscriberWhisper(chunk_queue_t *queue,
+    TranscriberWhisper(std::unique_ptr<Config> && config,
+                       chunk_queue_t *queue,
                        const QString &filePath,
                        QAudioFormat format);
 
     ~TranscriberWhisper() override;
 
-    void setModelId(const QString &id);      // must be called before start()
-    void setLanguage(const QString &lang);   // "en", "auto", "nb", etc.
-
-    void setModelDirectory(const QString &dir);
-
-    static std::span<const ModelInfo> builtinModels() noexcept;
-
-    bool initialized() const noexcept override { return initialized_; }
-
+    ModelKind kind() const noexcept override {
+        return ModelKind::WHISPER;
+    }
 
 protected:
+    bool createContextImpl() override;
     void processChunk(std::span<const uint8_t> data, bool lastChunk) override;
     void processRecording(std::span<const float> data) override;
-    bool init() override;
+    //bool init() override;
 
 private:
     bool ensureModelOnDisk();           // check + download if needed
     bool downloadModelBlocking(const ModelInfo &model);
-    bool loadModelContext();            // whisper_init_from_file()
 
     void startSession();
 
-
-    QString resolveModelPath() const;
-    std::optional<ModelInfo> currentModelInfo() const;
-
 private:
-    QString modelId_ = QStringLiteral("base.en");
-    QString language_ = QStringLiteral("auto");
-    QString modelDir_;
-    whisper_context* ctx_{};
-    bool initialized_{false};
+    whisper_context *w_ctx_{};
+    std::shared_ptr<whisper_state> whisper_state_;
     size_t chunks_ = 0;
-
-    // For network download (runs on the main thread; we’ll use a blocking
-    // helper in ensureModelOnDisk() via a local QEventLoop).
-    QNetworkAccessManager *nam_ = nullptr;
 
     // Audio parameters
     int sample_rate_ = 16000; // Hz
@@ -105,5 +72,4 @@ private:
     float last_seen_ms_ = 0.0f; // last time we saw in the audio
 
     QVector<TranscriptSegment> segments_;
-
 };

@@ -14,11 +14,11 @@ public:
 
     Queue() = default;
 
-    void push(const T &data)
+    void push(T && data)
     {
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            queue_.push_back(data);
+            queue_.push_back(std::move(data));
         }
         cv_.notify_one();
     }
@@ -27,9 +27,10 @@ public:
     {
         std::unique_lock<std::mutex> lock(mutex_);
         cv_.wait(lock, [&]{ return !queue_.empty() || stopped_; });
-        if (queue_.empty())
+        if (queue_.empty()) {
             return false;
-        out = queue_.front();
+        }
+        out = std::move(queue_.front());
         queue_.pop_front();
         return true;
     }
