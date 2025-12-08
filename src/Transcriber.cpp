@@ -134,7 +134,11 @@ Transcriber::Transcriber(std::unique_ptr<Config> && config,
                          QAudioFormat format)
     : Model(std::move(config)), queue_(queue), file_(pcmFilePath), format_(format)
 {
-
+    if (!file_.open(QIODevice::ReadOnly)) {
+        LOG_ERROR_N << "Failed to open file for writing: " << pcmFilePath;
+        throw runtime_error("Failed to open file for writing");
+        return;
+    }
 }
 
 QCoro::Task<bool> Transcriber::transcribeChunks()
@@ -166,6 +170,13 @@ QCoro::Task<bool> Transcriber::transcribeRecording()
     const auto result = co_await future;
     LOG_TRACE_N << "TranscribeRecording command completed.";
     co_return result;
+}
+
+void Transcriber::stopTranscribing() {
+    if (state() == State::RUNNING) {
+        LOG_TRACE_N << "Stopping ongoing transibing...";
+        setState(State::STOPPING);
+    }
 }
 
 const string &Transcriber::language() const noexcept

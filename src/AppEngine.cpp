@@ -593,7 +593,16 @@ QCoro::Task<void> AppEngine::transcribeChunks()
 QCoro::Task<void> AppEngine::onRecordingDone()
 {
     if (post_transcriber_) {
+        if (rec_transcriber_) {
+            rec_transcriber_->stopTranscribing();
+        }
+
         setRecordingState(RecordingState::Processing);
+        assert(post_transcriber_->haveModel());
+        if (!post_transcriber_->isLoaded()) {
+            co_await post_transcriber_->loadModel();
+        }
+
         if (!co_await post_transcriber_->transcribeRecording()) {
             failed(tr("Post-processing transcription failed"));
             co_return;

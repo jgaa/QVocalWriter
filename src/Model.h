@@ -128,6 +128,7 @@ public:
 
     bool cancelled() const noexcept { return state() >= State::STOPPING;}
     bool haveModel() const noexcept { return model_instance_ != nullptr; }
+    bool isLoaded() const noexcept { return is_loaded_; }
     State state() const noexcept {return state_.load();}
 
     const Config& config() const noexcept {

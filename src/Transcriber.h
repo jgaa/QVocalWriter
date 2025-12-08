@@ -29,9 +29,7 @@ public:
     QCoro::Task<bool> transcribeChunks();
     QCoro::Task<bool> transcribeRecording();
 
-    void stopTranscribing() {
-        setState(State::STOPPING);
-    }
+    void stopTranscribing();
 
     const std::string& language() const noexcept;
 

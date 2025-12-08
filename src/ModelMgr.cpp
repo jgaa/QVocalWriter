@@ -561,7 +561,7 @@ QCoro::Task<std::shared_ptr<ModelInstanceBase> > ModelMgr::getInstance(ModelKind
 
 QCoro::Task<bool> ModelInstanceBase::load() noexcept
 {
-    if (++loaded_count_ > 0) {
+    if (++loaded_count_ == 1) {
         auto ok = co_await  QtConcurrent::run([this]() -> bool {
             return loadImpl();
         });
