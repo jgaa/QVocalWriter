@@ -9,133 +9,19 @@
 
 using namespace std;
 
-// std::ostream& operator<<(std::ostream &os, Transcriber::State state) {
-//     constexpr auto states = to_array<string_view>({string_view("CREATED"),
-//                                                       string_view("STARTED"),
-//                                                       string_view("INIT"),
-//                                                       string_view("READY"),
-//                                                       string_view("TRANSACRIBING"),
-//                                                       string_view("POST_TRANSCRIBING"),
-//                                                       string_view("STOPPING"),
-//                                                       string_view("STOPPED"),
-//                                                       string_view("ERROR")});
 
-//     return os << states.at(static_cast<size_t>(state));
-// }
 
-// Transcriber::Transcriber(chunk_queue_t *queue, const QString &filePath, QAudioFormat format)
-// : queue_(queue), file_(filePath), format_(format)
-// {
-//     if (!file_.open(QIODevice::ReadOnly)) {
-//         LOG_ERROR_N << "Failed to open file for writing: " << filePath.toStdString();
-//         throw runtime_error("Failed to open file for writing");
-//         return;
-//     }
-
-//     thread_ = std::jthread([this] { run(); });
-// }
-
-// void Transcriber::stop() {
-//     setState(State::STOPPING);
-//     enqueueCommand(CmdType::Exit);
-//     if (thread_ && thread_->joinable()) {
-//         LOG_TRACE_N << "Waiting for transcriber thread to join...";
-//         thread_->join();
-//         LOG_TRACE_N << "Transcriber thread joined.";
-//     }
-// }
-
-// void Transcriber::setState(State newState) {
-//     if (state_ == State::ERROR) {
-//         LOG_DEBUG_N << "Transcriber is in ERROR state, ignoring state change to "
-//                     << newState;
-//         return;
-//     }
-
-//     if (state_ != newState) {
-//         LOG_DEBUG_N << "Transcriber state changed from " << state_.load()
-//                     << " to " << newState;
-//         state_ = newState;
-//         emit stateChanged();
-//     }
-// }
-
-// void Transcriber::run() {
-//     setState(State::STARTED);
-//     while(state() < State::STOPPING) {
-//         LOG_DEBUG_N << "waiting for command...";
-//         CmdType ct{};
-//         cmdQueue_.pop(ct);
-
-//         LOG_DEBUG_N << "received command " << static_cast<int>(ct);
-
-//         switch(ct) {
-//         case CmdType::Prepare:
-//             LOG_DEBUG_N << "initializing...";
-//             setState(State::INIT);
-//             try {
-//                 if (!init()) {
-//                     LOG_ERROR_N << "initialization failed";
-//                     emit errorOccurred("Transcriber initialization failed");
-//                     setState(State::ERROR);
-//                     return;
-//                 }
-//                 setState(State::READY);
-//             } catch (const exception& ex) {
-//                 LOG_ERROR_N << "Transcriber:    exception during initialization: " << ex.what();
-//                 emit errorOccurred(QString("Transcriber: exception during initialization: %1").arg(ex.what()));
-//             }
-//             break;
-
-//         case CmdType::TranscribeChunks:
-//             LOG_DEBUG_N << "starting transcription session...";
-//             setState(State::TRANSACRIBING);
-//             try {
-//                 if (!transcribeSegments()) {
-//                     setState(State::ERROR);
-//                 } else {
-//                     setState(State::READY);
-//                 }
-//             } catch (const exception& ex) {
-//                 LOG_ERROR_N << "exception during transcription: " << ex.what();
-//                 result_ = false;
-//                 emit errorOccurred(QString("Transcriber: exception during transcription: %1").arg(ex.what()));
-//                 setState(State::ERROR);
-//             }
-//             break;
-
-//         case CmdType::PostTranscribe:
-//             LOG_DEBUG_N << "Starting post-transcribing the complete recording...";
-//             setState(State::POST_TRANSCRIBING);
-//             try {
-//                 processRecordingFromFile();
-//                 setState(State::READY);
-//             } catch (const exception& ex) {
-//                 LOG_ERROR_N << "exception during post-transcription: " << ex.what();
-//                 result_ = false;
-//                 emit errorOccurred(QString("Transcriber: exception during post-transcription: %1").arg(ex.what()));
-//                 setState(State::ERROR);
-//             }
-//             break;
-
-//         case CmdType::Exit:
-//             LOG_DEBUG_N << "exiting...";
-//             setState(State::STOPPING);
-//             cmdQueue_.stop();
-//         }
-//     }
-
-//     setState(State::STOPPED);
-// }
-
-Transcriber::Transcriber(std::unique_ptr<Config> && config,
+Transcriber::Transcriber(std::string name,
+                         std::unique_ptr<Config> && config,
                          chunk_queue_t *queue,
                          const QString &pcmFilePath,
                          QAudioFormat format)
-    : Model(std::move(config)), queue_(queue), file_(pcmFilePath), format_(format)
+    : Model(std::move(name), std::move(config)), queue_(queue), file_(pcmFilePath), format_(format)
 {
+    const auto *m = dynamic_cast<Model*>(this);
+    assert(m);
     if (!file_.open(QIODevice::ReadOnly)) {
-        LOG_ERROR_N << "Failed to open file for writing: " << pcmFilePath;
+        LOG_ERROR_EX(*m) << "Failed to open file for writing: " << pcmFilePath;
         throw runtime_error("Failed to open file for writing");
         return;
     }
@@ -149,32 +35,34 @@ QCoro::Task<bool> Transcriber::transcribeChunks()
 
     auto future = op->future();
 
-    LOG_TRACE_N << "Enqueuing TranscribeChunks command...";
+    LOG_TRACE_EX(*this) << "Enqueuing TranscribeChunks command...";
     enqueueCommand(std::move(op));
     const auto result = co_await future;
-    LOG_TRACE_N << "TranscribeChunks command completed.";
+    LOG_TRACE_EX(*this) << "TranscribeChunks command completed.";
     co_return result;
 }
 
 QCoro::Task<bool> Transcriber::transcribeRecording()
 {
     auto op = make_unique<Model::Operation>([this]() -> bool {
+        LOG_TRACE_EX(*this) << "Callig processRecordingFromFile... from worker thread";
         processRecordingFromFile();
+        LOG_TRACE_EX(*this) << "processRecordingFromFile completed.";
         return true;
     });
 
     auto future = op->future();
 
-    LOG_TRACE_N << "Enqueuing TranscribeRecording command...";
+    LOG_TRACE_EX(*this) << "Enqueuing TranscribeRecording command...";
     enqueueCommand(std::move(op));
     const auto result = co_await future;
-    LOG_TRACE_N << "TranscribeRecording command completed.";
+    LOG_TRACE_EX(*this) << "TranscribeRecording command completed.";
     co_return result;
 }
 
 void Transcriber::stopTranscribing() {
     if (state() == State::RUNNING) {
-        LOG_TRACE_N << "Stopping ongoing transibing...";
+        LOG_TRACE_EX(*this) << "Stopping ongoing transibing...";
         setState(State::STOPPING);
     }
 }
@@ -193,7 +81,7 @@ bool Transcriber::transcribeSegments()
 
     assert(file_.isOpen());
     if (!file_.isOpen()) {
-        LOG_ERROR_N << "Transcriber: file not open";
+        LOG_ERROR_EX(*this) << "Transcriber: file not open";
         return false;
     }
 
@@ -202,17 +90,17 @@ bool Transcriber::transcribeSegments()
 
     while(!cancelled()) {
         if (!queue_->pop(fc)) {
-            LOG_DEBUG_N << "Transcriber: queue stopped or empty";
+            LOG_DEBUG_EX(*this) << "Transcriber: queue stopped or empty";
 
             // Finish transcription of any remaining data
             processChunk({}, true);
             return true;;
         }
 
-        LOG_TRACE_N << "Reading #" << ++segment << " offset=" << fc.offset << " size=" << fc.size;
+        LOG_TRACE_EX(*this) << "Reading #" << ++segment << " offset=" << fc.offset << " size=" << fc.size;
 
         if (!file_.seek(fc.offset)) {
-            LOG_ERROR_N << "Transcriber: failed to seek to offset " << fc.offset;
+            LOG_ERROR_EX(*this) << "Transcriber: failed to seek to offset " << fc.offset;
             continue;
         }
 
@@ -227,12 +115,12 @@ bool Transcriber::transcribeSegments()
 
             // Repeat until we get the full chunk. Since we have it's size, it has already been written.
             do {
-                // LOG_TRACE_N << "Transcriber: reading chunk at offset " << (fc.offset + read + chunk_read)
+                // LOG_TRACE_EX(*this) << "Transcriber: reading chunk at offset " << (fc.offset + read + chunk_read)
                 //             << " size=" << (chunk_size - chunk_read);
                 const auto bytes = file_.read(buffer.data() + chunk_read, static_cast<qint64>(chunk_size - chunk_read));
                 assert(bytes >= 0);
                 if (bytes < 0) {
-                    LOG_ERROR_N << "Transcriber: failed to read " << (chunk_size - chunk_read)
+                    LOG_ERROR_EX(*this) << "Transcriber: failed to read " << (chunk_size - chunk_read)
                                 << " bytes from file at offset "
                                 << (fc.offset + read + chunk_read);
                     emit errorOccurred("Transcriber: file read error");
@@ -247,13 +135,13 @@ bool Transcriber::transcribeSegments()
                 try {
                     processChunk({reinterpret_cast<const uint8_t*>(buffer.data()), chunk_read});
                 } catch (const exception& ex) {
-                    LOG_ERROR_N << "Transcriber: exception during processChunk: " << ex.what();
+                    LOG_ERROR_EX(*this) << "Transcriber: exception during processChunk: " << ex.what();
                     emit errorOccurred(QString("Transcriber: exception during processChunk: %1").arg(ex.what()));
                     setState(State::ERROR);
                     return false;
                 }
             } else {
-                LOG_WARN_N << "Transcriber: read 0 bytes...";
+                LOG_WARN_EX(*this) << "Transcriber: read 0 bytes...";
             }
         }
     }
@@ -265,6 +153,8 @@ void Transcriber::processRecordingFromFile()
 {
     assert(file_.isOpen());
     file_.seek(0);
+
+    LOG_DEBUG_EX(*this) << name() << ": Post-processing complete recording from file, size=" << file_.size();
 
     static_assert(AUDIO_BUFFER_SIZE % sizeof(qint16) == 0, "AUDIO_BUFFER_SIZE must be aligned with sizeof(qint16)");
 
@@ -278,7 +168,7 @@ void Transcriber::processRecordingFromFile()
         const auto to_read = min<size_t>(buffer.size(), static_cast<size_t>(file_.size() - total_read));
         const auto bytes = file_.read(buffer.data(), static_cast<qint64>(to_read));
         if (bytes <= 0) {
-            LOG_ERROR_N << "Transcriber: failed to read from file during post-processing";
+            LOG_ERROR_EX(*this) << "Transcriber: failed to read from file during post-processing";
             emit errorOccurred("Transcriber: file read error during post-processing");
             setState(State::ERROR);
             return;

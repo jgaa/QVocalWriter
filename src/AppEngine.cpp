@@ -332,6 +332,7 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
         const auto language = language_table.at(size_t(language_index_));
         const auto model_id = getTranscriberModelId(model, language);
         if (rec_transcriber_ = co_await prepareModel(
+            "live-transcriber"s,
             model_id,
             language.whisper_language,
             true, // Load the live transcriber so it reacts faster when we start recording
@@ -348,6 +349,7 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
         const auto model_id = getTranscriberModelId(model, language);
 
         if (post_transcriber_ = co_await prepareModel(
+                "post-transcriber"s,
                 model_id,
                 language.whisper_language,
                 false, // Be lazy
@@ -362,10 +364,9 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
     co_return true;
 }
 
-QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareModel(string_view modelId,
-                                          string_view language,
-                                          bool loadModel,
-                                          bool submitFilalText)
+QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareModel(
+    std::string name, string_view modelId, string_view language,
+    bool loadModel, bool submitFilalText)
 {
     auto cfg = make_unique<Transcriber::Config>();
     cfg->model_name = modelId;
@@ -373,7 +374,7 @@ QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareModel(string_view modelId
     cfg->submit_filal_text = submitFilalText;
 
     shared_ptr<TranscriberWhisper> transcriber = make_shared<
-        TranscriberWhisper>(std::move(cfg), chunk_queue_.get(), pcm_file_path_, recorder_->format());
+        TranscriberWhisper>(name, std::move(cfg), chunk_queue_.get(), pcm_file_path_, recorder_->format());
 
     // Relay partial text signals
     connect(
@@ -419,7 +420,7 @@ void AppEngine::onFinalRecordingTextAvailable(const QString &text)
     LOG_INFO_N << "Final text available: " << text.toStdString();
     current_recorded_text_ = text;
     emit recordedTextChanged();
-    setRecordingState(RecordingState::Done);
+    //setRecordingState(RecordingState::Done);
 }
 
 QCoro::Task<void> AppEngine::transcribeChunks()
@@ -436,7 +437,9 @@ QCoro::Task<void> AppEngine::transcribeChunks()
 
 QCoro::Task<void> AppEngine::onRecordingDone()
 {
+    LOG_DEBUG_N << "Recording done, starting post-processing transcription if needed";
     if (post_transcriber_) {
+        LOG_DEBUG_N << "Stopping live transcriber before post-processing";
         if (rec_transcriber_) {
             rec_transcriber_->stopTranscribing();
         }

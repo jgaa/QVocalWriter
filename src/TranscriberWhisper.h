@@ -21,7 +21,8 @@ struct TranscriptSegment {
 class TranscriberWhisper final : public Transcriber
 {
 public:
-    TranscriberWhisper(std::unique_ptr<Config> && config,
+    TranscriberWhisper(std::string name,
+                       std::unique_ptr<Config> && config,
                        chunk_queue_t *queue,
                        const QString &filePath,
                        QAudioFormat format);

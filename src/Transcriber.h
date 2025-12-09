@@ -17,7 +17,8 @@ class Transcriber : public Model
 {
     Q_OBJECT
 public:
-    Transcriber(std::unique_ptr<Config> &&config,
+    Transcriber(std::string name,
+                std::unique_ptr<Config> &&config,
                 chunk_queue_t *queue,
                 const QString &pcmFilePath,
                 QAudioFormat format);

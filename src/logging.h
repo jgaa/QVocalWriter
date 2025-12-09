@@ -1,6 +1,20 @@
 #pragma once
 
+#include <string>
+#include <utility>
+
 #define LOGFAULT_USE_TID_AS_NAME 1
+
+
+class Model;
+class Transcriber;
+class TranscriberWhisper;
+
+namespace logfault {
+std::pair<bool /* json */, std::string /* content or json */> toLog(const Model& m, bool json);
+std::pair<bool /* json */, std::string /* content or json */> toLog(const Transcriber& m, bool json);
+std::pair<bool /* json */, std::string /* content or json */> toLog(const TranscriberWhisper& m, bool json);
+}
 
 #include "logfault/logfault.h"
 
@@ -22,4 +36,3 @@
 #define LOG_INFO_EX(...)    LOGFAULT_LOG_EX__(logfault::LogLevel::INFO __VA_OPT__(, __VA_ARGS__))
 #define LOG_DEBUG_EX(...)   LOGFAULT_LOG_EX__(logfault::LogLevel::DEBUGGING __VA_OPT__(, __VA_ARGS__))
 #define LOG_TRACE_EX(...)   LOGFAULT_LOG_EX__(logfault::LogLevel::TRACE __VA_OPT__(, __VA_ARGS__))
-

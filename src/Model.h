@@ -109,7 +109,7 @@ public:
         ERROR
     };
 
-    Model(std::unique_ptr<Config> &&config);
+    Model(std::string name, std::unique_ptr<Config> &&config);
     virtual ~Model();
 
     Model(const Model&) = delete;
@@ -130,6 +130,9 @@ public:
     bool haveModel() const noexcept { return model_instance_ != nullptr; }
     bool isLoaded() const noexcept { return is_loaded_; }
     State state() const noexcept {return state_.load();}
+    std::string name() const noexcept {
+        return name_;
+    }
 
     const Config& config() const noexcept {
         assert(config_);
@@ -162,6 +165,7 @@ signals:
 private:
     void run() noexcept;
 
+    std::string name_;
     std::unique_ptr<Config> config_;
     std::shared_ptr<ModelInstanceBase> model_instance_;
     std::atomic<State> state_{State::CREATED};

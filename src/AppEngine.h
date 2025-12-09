@@ -92,7 +92,11 @@ private:
     void createPipelineIfNeeded();
     QCoro::Task<void> startPrepareForRecording();
     QCoro::Task<bool> prepareTranscriberModels();
-    QCoro::Task<std::shared_ptr<Transcriber>> prepareModel(std::string_view modelId, std::string_view language, bool loadModel, bool submitFilalText);
+    QCoro::Task<std::shared_ptr<Transcriber>> prepareModel(std::string name,
+                                                           std::string_view modelId,
+                                                           std::string_view language,
+                                                           bool loadModel,
+                                                           bool submitFilalText);
     void onFinalRecordingTextAvailable(const QString &text);
     QCoro::Task<void> transcribeChunks();
     QCoro::Task<void> onRecordingDone();

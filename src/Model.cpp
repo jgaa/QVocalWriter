@@ -15,6 +15,19 @@
 using namespace std;
 
 
+namespace logfault {
+std::pair<bool /* json */, std::string /* content or json */> toLog(const Model& m, bool json) {
+    if (json) {
+        return make_pair(true, format(R"("model":"{}",)",
+                                      m.name()
+                                      ));
+    }
+
+    return make_pair(false, format("Model{{name={}}}",
+                                   m.name()));
+}
+} // logfault ns
+
 std::ostream& operator << (std::ostream& os, Model::State state) {
     constexpr auto states = to_array<string_view>({
         "CREATED",
@@ -46,8 +59,8 @@ std::ostream& operator<<(std::ostream &os, const Model::Operation& op) {
     return os << op.op();
 }
 
-Model::Model(std::unique_ptr<Model::Config> && config)
-    : config_{std::move(config)}
+Model::Model(std::string name, std::unique_ptr<Model::Config> && config)
+    : name_{std::move(name)}, config_{std::move(config)}
 {
     assert(config_);
     worker_ = std::jthread([this] { run(); });
@@ -115,19 +128,19 @@ QCoro::Task<bool> Model::loadModel()
 QCoro::Task<void> Model::stop()
 {
     if(state() < State::STOPPING) {
-        LOG_DEBUG_N << "Stopping model...";
+        LOG_DEBUG_EX(*this) << "Stopping model...";
         enqueueCommand(std::make_unique<Operation>(CmdType::EXIT));
     }
 
     // Wait for the stopped signal
-    LOG_DEBUG_N << "Waiting for model to stop...";
+    LOG_DEBUG_EX(*this) << "Waiting for model to stop...";
     co_await qCoro(this, &Model::stopped);
 
     // Join the thread
     if (worker_ && worker_->joinable()) {
-        LOG_DEBUG_N << "Waiting for model worker thread to join...";
+        LOG_DEBUG_EX(*this) << "Waiting for model worker thread to join...";
         worker_->join();
-        LOG_DEBUG_N << "Model worker thread joined.";
+        LOG_DEBUG_EX(*this) << "Model worker thread joined.";
     }
 
     co_return;
@@ -136,7 +149,7 @@ QCoro::Task<void> Model::stop()
 void Model::setState(State state)
 {
     if(state_ != state) {
-        LOG_DEBUG_N << "Model state for "
+        LOG_DEBUG_EX(*this) << "Model state for "
                     << config().model_name
                     <<" changed from " << state_ << " to " << state;
         state_ = state;
@@ -146,7 +159,7 @@ void Model::setState(State state)
 
 bool Model::failed(QString message)
 {
-    LOG_WARN_N << "Model failed: " << message.toStdString();
+    LOG_WARN_EX(*this) << "Model failed: " << message.toStdString();
     setState(State::ERROR);
     emit errorOccurred(message);
     return false;
@@ -155,7 +168,7 @@ bool Model::failed(QString message)
 void Model::enqueueCommand(std::unique_ptr<Operation> &&op)
 {
     assert(op);
-    LOG_TRACE_N << "Enqueue command: " << *op;
+    LOG_TRACE_EX(*this) << "Enqueue command: " << *op;
     cmd_queue_.push(std::move(op));
 }
 
@@ -168,15 +181,15 @@ void Model::run() noexcept
             setState(State::RUNNING);
         }
 
-        LOG_DEBUG_N << "waiting for command...";
+        LOG_DEBUG_EX(*this) << ": Waiting for command...";
         cmd_queue_t::type_t op;
         cmd_queue_.pop(op);
         if(!op) {
-            LOG_ERROR_N << "No command received, exiting...";
+            LOG_ERROR_EX(*this) << ": No command received, exiting...";
             break;
         }
 
-        LOG_DEBUG_N << "Processing command: " << *op;
+        LOG_DEBUG_EX(*this) << ": Processing command: " << *op;
 
         const auto op_type = op->op();
         try {
@@ -190,7 +203,7 @@ void Model::run() noexcept
                     op->execute();
                     break;
                 case CmdType::EXIT:
-                    LOG_DEBUG_N << "Exit command received, stopping model...";
+                    LOG_DEBUG_EX(*this) << ": Exit command received, stopping model...";
                     setState(State::STOPPING);
 
                     // TODO: Implement and set the correct restlt
@@ -198,12 +211,12 @@ void Model::run() noexcept
                     op->setResult(true);
                     break;
                 default:
-                    LOG_WARN_N << "Unknown command received.";
+                    LOG_WARN_EX(*this) << ": Unknown command received.";
                     op->setResult(false);
                     break;
             }
         } catch (const exception& ex) {
-            failed(tr("Caught exception in command loop: %1").arg(ex.what()));
+            failed(tr("%1 Caught exception in command loop: %2").arg(name()).arg(ex.what()));
         }
     }
 
