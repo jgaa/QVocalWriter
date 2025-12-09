@@ -30,6 +30,8 @@ class AppEngine : public QObject
     Q_PROPERTY(bool canStop READ canStop NOTIFY stateFlagsChanged)
     Q_PROPERTY(const qreal& recordingLevel MEMBER recording_level_ NOTIFY recordingLevelChanged)
     Q_PROPERTY(const QString& recordedText MEMBER current_recorded_text_ NOTIFY recordedTextChanged)
+    Q_PROPERTY(const QStringList& michrophones READ microphones() NOTIFY microphonesChanged)
+    Q_PROPERTY(int currentMic READ currentMic WRITE setCurrentMic NOTIFY currentMicChanged)
 
 public:
     enum RecordingState {
@@ -58,6 +60,9 @@ public:
     AudioController &audioController() { return audio_controller_; }
     QStringList languages()   const { return languages_; }
     QStringList modelSizes()  const { return model_sizes_; }
+    QStringList microphones() const;
+    int currentMic() const;
+    void setCurrentMic(int index);
 
     int  languageIndex() const { return language_index_; }
     int  modelIndex()    const { return model_index_;    }
@@ -75,10 +80,11 @@ signals:
     void stateFlagsChanged();
     void partialTextAvailable(const QString &text);
     void errorOccurred(const QString &message);
-    void modelDownloadProgress(qint64 bytesReceived, qint64 bytesTotal);
-    void postModelDownloadProgress(qint64 bytesReceived, qint64 bytesTotal);
+    void downloadProgress(QString name, qint64 bytesReceived, qint64 bytesTotal);
     void recordingLevelChanged();
     void recordedTextChanged();
+    void microphonesChanged();
+    void currentMicChanged();
 
 private:
     RecordingState recordingState() const { return recording_state_; }
@@ -87,9 +93,6 @@ private:
     QCoro::Task<void> startPrepareForRecording();
     QCoro::Task<bool> prepareTranscriberModels();
     QCoro::Task<std::shared_ptr<Transcriber>> prepareModel(std::string_view modelId, std::string_view language, bool loadModel, bool submitFilalText);
-    // void prepareTranscriber();
-    // void onTranscriberPrepared(bool ok, const QString &errorText);
-    // void onPostTranscriberStateChanged();
     void onFinalRecordingTextAvailable(const QString &text);
     QCoro::Task<void> transcribeChunks();
     QCoro::Task<void> onRecordingDone();

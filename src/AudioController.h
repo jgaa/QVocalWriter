@@ -14,6 +14,8 @@ public:
     const QAudioDevice &currentInputDevice() const { return m_inputDevice; }
 
     void setInputDevice(const QAudioDevice &dev);
+    void setInputDevice(int index);
+    int getCurrentDeviceIndex() const;
 
 signals:
     void inputDevicesChanged();

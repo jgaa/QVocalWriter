@@ -217,6 +217,7 @@ std::filesystem::path ModelMgr::findModelPath(ModelKind kind, const ModelInfo &m
 QCoro::Task<bool> ModelMgr::downloadModel(ModelKind kind, const ModelInfo &modelInfo, const QString& fullPath) noexcept
 {
     // Construct download URL
+    const QString name = QString::fromUtf8(modelInfo.id);
     const QString base_url = QString::fromUtf8(modelDownloadUrlBase(kind));
     const QString url_str = base_url + QString::fromUtf8(modelInfo.filename);
     const QUrl url{url_str};
@@ -226,7 +227,7 @@ QCoro::Task<bool> ModelMgr::downloadModel(ModelKind kind, const ModelInfo &model
                  << ", url='" << url.toString() << "'"
                  << ", path='" << fullPath << "'";
 
-    const bool success = co_await downloadFile(url, fullPath);
+    const bool success = co_await downloadFile(name, url, fullPath);
     if (!success) {
         LOG_ERROR_N << "Failed to download model file: " << url.toString();
         co_return false;
@@ -236,7 +237,8 @@ QCoro::Task<bool> ModelMgr::downloadModel(ModelKind kind, const ModelInfo &model
     co_return true;
 }
 
-QCoro::Task<bool> ModelMgr::downloadFile(const QUrl &url,
+QCoro::Task<bool> ModelMgr::downloadFile(const QString& name,
+                                         const QUrl &url,
                                          const QString &fullPath) noexcept
 {
     if (!nam_) {
@@ -271,7 +273,10 @@ QCoro::Task<bool> ModelMgr::downloadFile(const QUrl &url,
     bool writeError = false;
 
     QObject::connect(reply, &QNetworkReply::downloadProgress,
-                     this, &ModelMgr::modelDownloadProgress);
+                     [this, url, name](qint64 bytesReceived, qint64 bytesTotal){
+
+        emit downloadProgress(name, bytesReceived, bytesTotal);
+    });
 
     // Our “any-of-these-signals” proxy
     ReplyEventProxy proxy{reply, reply};  // parent = reply for lifetime tying

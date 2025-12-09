@@ -59,9 +59,6 @@ int main(int argc, char *argv[])
 
     qml_engine.rootContext()->setContextProperty("appEngine", &app_engine);
 
-    //LOG_TRACE_N << "Registering static models for QML...";
-    //qmlRegisterSingletonInstance<AppEngine>("AppEngine", 1, 0, "AppEngine", &app_engine);
-
     QObject::connect(
         &qml_engine,
         &QQmlApplicationEngine::objectCreationFailed,

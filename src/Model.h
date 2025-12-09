@@ -154,7 +154,6 @@ protected:
 signals:
     void partialTextAvailable(const QString &text);
     void finalTextAvailable(const QString &text);
-    void modelDownloadProgress(qint64 bytesReceived, qint64 bytesTotal);
     void modelReady();
     void errorOccurred(const QString &message);
     void stateChanged();

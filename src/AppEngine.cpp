@@ -177,6 +177,50 @@ AppEngine::AppEngine() {
     pcm_file_path_ = baseDir + QLatin1String("/recording.pcm");
 
     model_mgr_ = make_shared<ModelMgr>();
+    assert(model_mgr_);
+
+    connect(
+        model_mgr_.get(),
+        &ModelMgr::downloadProgress,
+        this,
+        &AppEngine::downloadProgress
+        );
+
+    connect (
+        &audio_controller_,
+        &AudioController::inputDevicesChanged,
+        this,
+        &AppEngine::microphonesChanged
+        );
+
+    connect (
+        &audio_controller_,
+        &AudioController::currentInputDeviceChanged,
+        this,
+        &AppEngine::currentMicChanged
+        );
+}
+
+QStringList AppEngine::microphones() const
+{
+    QStringList mics;
+    audio_controller_.inputDevices();
+
+    for (const auto &dev : audio_controller_.inputDevices()) {
+        mics.append(dev.description());
+    }
+
+    return mics;
+}
+
+int AppEngine::currentMic() const
+{
+    return audio_controller_.getCurrentDeviceIndex();
+}
+
+void AppEngine::setCurrentMic(int index)
+{
+    audio_controller_.setInputDevice(index);
 }
 
 bool AppEngine::canPrepare() const
@@ -238,156 +282,6 @@ void AppEngine::setRecordingState(RecordingState newState)
         emit stateFlagsChanged();
     }
 }
-
-// void AppEngine::createPipelineIfNeeded()
-// {
-//     if (!chunk_queue_) {
-//         chunk_queue_ = make_shared<chunk_queue_t>();
-//     }
-
-//     if (!recorder_) {
-//         recorder_ = make_shared<AudioRecorder>(audio_controller_.currentInputDevice());
-
-//         connect(
-//             recorder_->captureDevice(),
-//             &AudioCaptureDevice::recordingLevelUpdated,
-//             this,
-//             [this] (qreal level) {
-//                 LOG_TRACE_N << "Recording level updated: " << level;
-//                 if (level != recording_level_) {
-//                     recording_level_ = level;
-//                     emit recordingLevelChanged();
-//                 }
-//             },
-//             Qt::QueuedConnection
-//         );
-//     }
-
-//     if (!file_writer_) {
-//         file_writer_ = make_shared<AudioFileWriter>(recorder_->ringBuffer(), chunk_queue_.get(), pcm_file_path_);
-//     }
-
-//     if (!rec_transcriber_ && model_index_ >= 1) {
-//         const auto &model = model_table.at(size_t(model_index_));
-//         const auto language = language_table.at(size_t(language_index_));
-
-
-//         string model_id;
-//         if (model.has_lng_postfix && language.whisper_language == "en") {
-//             model_id = format("{}.en", model.whisper_size);
-//         } else {
-//             model_id = model.whisper_size;
-//         }
-
-//         LOG_INFO_N << "Using Whisper model id: " << model_id;
-
-//         rec_transcriber_ = make_shared<TranscriberWhisper>(chunk_queue_.get(), pcm_file_path_, recorder_->format());
-//         rec_transcriber_->setModelId(QString::fromLatin1(model_id));
-//         if (!language.whisper_language.empty()) {
-//             rec_transcriber_->setLanguage(QString::fromUtf8(language.whisper_language.data(), int(language.whisper_language.size())));
-//         }
-
-//         // Relay partial text signals
-//         connect(
-//             rec_transcriber_.get(),
-//             &Transcriber::partialTextAvailable,
-//             this,
-//             [this](const QString &text) {
-//                 LOG_TRACE_N << "Partial text available: " << text.toStdString();
-//                 current_recorded_text_ = text;
-//                 emit recordedTextChanged();
-//             }
-//         );
-
-//         // Relay error signals
-//         connect(
-//             rec_transcriber_.get(),
-//             &Transcriber::errorOccurred,
-//             this,
-//             [this](const QString &msg) {
-//                 if (recording_state_ == RecordingState::Preparing) {
-//                     onTranscriberPrepared(false, msg);
-//                 }
-//                 else {
-//                     setRecordingState(RecordingState::Error);
-//                     emit errorOccurred(msg);
-//                 }
-//             }
-//         );
-
-//         // Handle state changed
-//         connect(
-//             rec_transcriber_.get(),
-//             &Transcriber::stateChanged,
-//             this,
-//             &AppEngine::onTranscriberStateChanged);
-
-//         // Relay download progress signal
-//         connect(
-//             rec_transcriber_.get(),
-//             &Transcriber::modelDownloadProgress,
-//             this,
-//             &AppEngine::modelDownloadProgress
-//         );
-
-//         rec_transcriber_->prepareModel();
-//     }
-
-//     if (!post_transcriber_ && post_model_index_ >= 1) {
-//         if (post_model_index_ == model_index_) {
-//             post_transcriber_ = rec_transcriber_;
-//         } else {
-//             const auto &model = model_table.at(size_t(model_index_));
-//             const auto language = language_table.at(size_t(language_index_));
-//             string model_id;
-//             if (model.has_lng_postfix && language.whisper_language == "en") {
-//                 model_id = format("{}.en", model.whisper_size);
-//             } else {
-//                 model_id = model.whisper_size;
-//             }
-
-//             LOG_INFO_N << "Using Whisper model id: " << model_id;
-
-//             post_transcriber_ = make_shared<TranscriberWhisper>(chunk_queue_.get(), pcm_file_path_, recorder_->format());
-//             post_transcriber_->setModelId(QString::fromLatin1(model_id));
-//             if (!language.whisper_language.empty()) {
-//                 post_transcriber_->setLanguage(QString::fromUtf8(language.whisper_language.data(), int(language.whisper_language.size())));
-//             }
-
-//             // Handle state changed
-//             connect(
-//                 rec_transcriber_.get(),
-//                 &Transcriber::stateChanged,
-//                 this,
-//                 &AppEngine::onPostTranscriberStateChanged);
-
-//             // Relay download progress signal
-//             connect(
-//                 rec_transcriber_.get(),
-//                 &Transcriber::modelDownloadProgress,
-//                 this,
-//                 &AppEngine::postModelDownloadProgress
-//                 );
-
-//             post_transcriber_->prepareModel();
-//         }
-
-//         assert(post_transcriber_);
-
-//         connect(post_transcriber_.get(),
-//                 &Transcriber::finalTextAvailable,
-//                 this,
-//                 &AppEngine::onFinalRecordingTextAvailable);
-
-//     } else {
-//         if (rec_transcriber_) {
-//             connect(rec_transcriber_.get(),
-//                     &Transcriber::finalTextAvailable,
-//                     this,
-//                     &AppEngine::onFinalRecordingTextAvailable);
-//         }
-//     }
-// }
 
 QCoro::Task<void> AppEngine::startPrepareForRecording()
 {
@@ -503,14 +397,6 @@ QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareModel(string_view modelId
         }
     );
 
-    // Relay download progress signal
-    connect(
-        transcriber.get(),
-        &Transcriber::modelDownloadProgress,
-        this,
-        &AppEngine::modelDownloadProgress
-        );
-
     if (submitFilalText) {
         // Relay final text signal
         connect(post_transcriber_.get(),
@@ -527,48 +413,6 @@ QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareModel(string_view modelId
 
     co_return transcriber;
 }
-
-// void AppEngine::prepareTranscriber()
-// {
-//     if (!canPrepare()) {
-//         LOG_WARN_N << "Cannot prepare transcriber in current state";
-//         return;
-//     }
-
-//     setRecordingState(RecordingState::Preparing);
-//     createPipelineIfNeeded();
-// }
-
-// void AppEngine::onTranscriberPrepared(bool ok, const QString &errorText)
-// {
-//     if (!ok) {
-//         setRecordingState(Error);
-//         emit errorOccurred(errorText.isEmpty()
-//                               ? tr("Failed to prepare transcriber")
-//                               : errorText);
-//         return;
-//     }
-
-//     setRecordingState(Ready);
-// }
-
-// void AppEngine::onPostTranscriberStateChanged()
-// {
-//     assert(post_transcriber_);
-//     const auto tst = post_transcriber_->state();
-//     switch(tst) {
-//     default:
-//     case Transcriber::State::READY:
-//         LOG_DEBUG_N << "Post-transcriber is ready";
-//         if (recordingState() <= RecordingState::Preparing) {
-//             if (!rec_transcriber_ || (rec_transcriber_->state() == Transcriber::State::READY)) {
-//                 setRecordingState(RecordingState::Ready);
-//             }
-//         }
-//         break;
-//         LOG_TRACE_N << "Ignoring post-transcriber change state to " << tst;
-//     }
-// }
 
 void AppEngine::onFinalRecordingTextAvailable(const QString &text)
 {

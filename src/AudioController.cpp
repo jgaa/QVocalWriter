@@ -23,6 +23,33 @@ void AudioController::setInputDevice(const QAudioDevice &dev) {
     emit currentInputDeviceChanged();
 }
 
+void AudioController::setInputDevice(int index)
+{
+    if (index < 0) {
+        setInputDevice(QMediaDevices::defaultAudioInput());
+        emit currentInputDeviceChanged();
+        return;
+    }
+
+    const auto devices = media_devices_.audioInputs();
+    if (index < 0 || index >= devices.size()) {
+        LOG_ERROR_N << "Invalid audio input device index: " << index;
+        return;
+    }
+    setInputDevice(devices.at(index));
+    emit currentInputDeviceChanged();
+}
+
+int AudioController::getCurrentDeviceIndex() const
+{
+    for(int i = 0; i < media_devices_.audioInputs().size(); ++i) {
+        if (media_devices_.audioInputs().at(i).id() == m_inputDevice.id()) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 void AudioController::printDevices()
 {
     auto ix = 0u;

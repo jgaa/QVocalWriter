@@ -15,6 +15,32 @@ Item {
         anchors.fill: parent
         spacing: 12
 
+        // Microphone selection
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Label {
+                text: qsTr("Microphone")
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            ComboBox {
+                id: languageCombo
+                Layout.fillWidth: true
+                model: appEngine.michrophones
+                currentIndex: appEngine.currentMic
+
+                onCurrentIndexChanged: {
+                    if (currentIndex !== appEngine.currentMic)
+                        appEngine.currentMic = currentIndex
+                }
+
+                enabled: appEngine.recordingState === AppEngine.Idle
+            }
+        }
+
+
         // --- Language selection ---
         RowLayout {
             Layout.fillWidth: true
@@ -26,7 +52,7 @@ Item {
             }
 
             ComboBox {
-                id: languageCombo
+                id: micCombo
                 Layout.fillWidth: true
                 model: appEngine.languages
                 currentIndex: appEngine.languageIndex
@@ -142,13 +168,14 @@ Item {
             spacing: 8
 
             Label {
-                text: qsTr("Post-model download progress:")
-                Layout.alignment: Qt.AlignVCenter
-                visible: postModelDownloadBar.visible
+                id: downloadLabel
+                property string name: ""
+                text: qsTr("Downloading " + name)
+                visible: downloadBar.visible
             }
 
             ProgressBar {
-                id: postModelDownloadBar
+                id: downloadBar
                 Layout.fillWidth: true
 
                 // local state to hold progress
@@ -165,9 +192,10 @@ Item {
                 // Listen to the C++ signal from appEngine
                 Connections {
                     target: appEngine
-                    function onPostModelDownloadProgress(bytesReceivedArg, bytesTotalArg) {
-                        postModelDownloadBar.bytesReceived = bytesReceivedArg
-                        postModelDownloadBar.bytesTotal = bytesTotalArg
+                    function onDownloadProgress(name, bytesReceivedArg, bytesTotalArg) {
+                        downloadBar.bytesReceived = bytesReceivedArg
+                        downloadBar.bytesTotal = bytesTotalArg
+                        downloadLabel.name = name
                     }
                 }
             }

@@ -139,7 +139,7 @@ public:
     std::optional<ModelInfo> findBestModel(ModelKind kind, const QString& modelName) const noexcept;
 
 signals:
-    void modelDownloadProgress(qint64 bytesReceived, qint64 bytesTotal);
+    void downloadProgress(QString name, qint64 bytesReceived, qint64 bytesTotal);
     void modelReady(const QString& modelId);
     void stateChanged();
 
@@ -148,7 +148,7 @@ private:
     QCoro::Task<bool> makeAvailable(ModelKind kind, const ModelInfo& modelInfo) noexcept;
     std::filesystem::path findModelPath(ModelKind kind, const ModelInfo &modelInfo) const;
     QCoro::Task<bool> downloadModel(ModelKind kind, const ModelInfo &modelInfo, const QString& fullPath) noexcept;
-    QCoro::Task<bool> downloadFile(const QUrl& url, const QString& fullPath) noexcept;
+    QCoro::Task<bool> downloadFile(const QString& name, const QUrl& url, const QString& fullPath) noexcept;
 
     instances_map_t& instances(ModelKind kind) {
         return instances_.at(static_cast<size_t>(kind));
