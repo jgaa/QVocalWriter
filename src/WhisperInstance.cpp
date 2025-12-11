@@ -19,13 +19,14 @@ std::shared_ptr<whisper_state> WhisperInstance::newState()
 {
     assert(shared_ctx_ != nullptr);
 
-    whisper_state *state = whisper_init_state(shared_ctx_);
+    whisper_state *state = whisper_init_state(whisperCtx());
     if (!state) {
         LOG_ERROR_N << "Failed to create new Whisper state";
         return nullptr;
     }
 
     return std::shared_ptr<whisper_state>(state, [this](whisper_state *s) {
+        LOG_TRACE_N << "Freeing Whisper state";
         whisper_free_state(s);
     });
 }
@@ -50,7 +51,13 @@ bool WhisperInstance::loadImpl() noexcept
     cparams.dtw_n_top = 0;            // default means let whisper choose
 
     const ScopedTimer timer;
-    shared_ctx_ = whisper_init_from_file_with_params_no_state(full_path.c_str(), cparams);
+    if (auto *ctx = whisper_init_from_file_with_params_no_state(full_path.c_str(), cparams)) {
+        shared_ctx_ = std::shared_ptr<whisper_context>(ctx, [](whisper_context *c) {
+            LOG_TRACE_N << "Freeing Whisper model context";
+            whisper_free(c);
+            LOG_TRACE_N << "Whisper model context freed";
+        });
+    }
 
     if (!shared_ctx_) {
         LOG_ERROR_N << "Failed to load Whisper model from " << path();
@@ -64,11 +71,7 @@ bool WhisperInstance::loadImpl() noexcept
 bool WhisperInstance::unloadImpl() noexcept
 {
     if (shared_ctx_) {
-        const ScopedTimer timer;
-        LOG_DEBUG_N << "Unloading Whisper model from " << path();
-        whisper_free(shared_ctx_);
-        LOG_DEBUG_N << "Model unloaded in " << timer.elapsed() << " seconds";
-        shared_ctx_ = nullptr;
+        shared_ctx_.reset();
     }
     return true;
 }

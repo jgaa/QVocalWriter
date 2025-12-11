@@ -9,6 +9,11 @@
 
 using namespace std;
 
+namespace logfault {
+std::pair<bool /* json */, std::string /* content or json */> toLog(const Transcriber& m, bool json) {
+    return toLogHandler(m, json, "Transcriber");
+}
+} // ns
 
 
 Transcriber::Transcriber(std::string name,
@@ -61,8 +66,8 @@ QCoro::Task<bool> Transcriber::transcribeRecording()
 }
 
 void Transcriber::stopTranscribing() {
-    if (state() == State::RUNNING) {
-        LOG_TRACE_EX(*this) << "Stopping ongoing transibing...";
+    if (state() < State::STOPPING) {
+        LOG_TRACE_EX(*this) << "Stopping transcriber.";
         setState(State::STOPPING);
     }
 }
@@ -88,12 +93,16 @@ bool Transcriber::transcribeSegments()
     FileChunk fc;
     auto segment = 0u;
 
-    while(!cancelled()) {
+    while(!isCancelled()) {
         if (!queue_->pop(fc)) {
-            LOG_DEBUG_EX(*this) << "Transcriber: queue stopped or empty";
+            LOG_DEBUG_EX(*this) << "Transcriber: queue stopped or empty. submit_filal_text="
+                                << config().submit_filal_text;
 
             // Finish transcription of any remaining data
-            processChunk({}, true);
+            if (config().submit_filal_text) {
+                LOG_TRACE_EX(*this) << "Processing last chunk";
+                processChunk({}, true);
+            }
             return true;;
         }
 

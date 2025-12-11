@@ -151,6 +151,8 @@ void AppEngine::reset()
 AppEngine::AppEngine() {
     QSettings settings{};
 
+    setStateText();
+
     for (const auto &lang : language_table) {
         languages_.append(QString::fromUtf8(lang.name.data(), int(lang.name.size())));
     }
@@ -274,12 +276,13 @@ void AppEngine::setPostModelIndex(int index)
 }
 
 void AppEngine::setRecordingState(RecordingState newState)
-{
+{    
     if (recording_state_ != newState) {
         LOG_DEBUG_N << "Recording state changed from " << recording_state_ << " to " << newState;
         recording_state_ = newState;
         emit recordingStateChanged(newState);
         emit stateFlagsChanged();
+        setStateText();
     }
 }
 
@@ -336,7 +339,7 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
             model_id,
             language.whisper_language,
             true, // Load the live transcriber so it reacts faster when we start recording
-            false // Do not submit final text yet
+            (post_model_index_ < 1) // Submit final text?
             ); !rec_transcriber_) {
             co_return failed(tr("Failed to prepare live transcriber") + ": " + QString::fromUtf8(model.name));
         }
@@ -379,10 +382,10 @@ QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareModel(
     // Relay partial text signals
     connect(
         transcriber.get(),
-        &Transcriber::partialTextAvailable,
+        &Model::partialTextAvailable,
         this,
         [this](const QString &text) {
-            LOG_TRACE_N << "Partial text available: " << text.toStdString();
+            LOG_TRACE_N << "Partial text available: " << text;
             current_recorded_text_ = text;
             emit recordedTextChanged();
         }
@@ -400,11 +403,15 @@ QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareModel(
 
     if (submitFilalText) {
         // Relay final text signal
-        connect(post_transcriber_.get(),
-                &Transcriber::finalTextAvailable,
-                this,
-                &AppEngine::onFinalRecordingTextAvailable);
+        LOG_TRACE_N << "Connecting finalTextAvailable signal for transcriber: " << name;
+        connect(transcriber.get(),
+                &Model::finalTextAvailable,
+                [this](const QString &text) {
+                    LOG_TRACE_N << "Final text available: " << text;
+                    onFinalRecordingTextAvailable(text);
+                });
     }
+
 
     co_await transcriber->init(QString::fromUtf8(modelId));
 
@@ -429,8 +436,6 @@ QCoro::Task<void> AppEngine::transcribeChunks()
         failed(tr("Live transcription failed"));
         co_return;
     }
-
-    co_await onRecordingDone();
 
     co_return;
 }
@@ -469,6 +474,7 @@ bool AppEngine::failed(const QString &why)
 
 QCoro::Task<void> AppEngine::doReset()
 {
+    LOG_DEBUG_N << "Resetting AppEngine";
     setRecordingState(RecordingState::Resetting);
 
     if (rec_transcriber_) {
@@ -484,19 +490,41 @@ QCoro::Task<void> AppEngine::doReset()
         co_await post_transcriber_->stop();
         // reset later
         QTimer::singleShot(0, this, [this]() {
-            rec_transcriber_.reset();
+            post_transcriber_.reset();
         });
     }
 
-    if (file_writer_) {
-        file_writer_.reset();
-    }
+    file_writer_.reset();
+    recorder_.reset();
+    chunk_queue_.reset();
 
-    if (recorder_) {
-        recorder_.reset();
-    }
-
+    current_recorded_text_.clear();
     setRecordingState(RecordingState::Idle);
     emit recordedTextChanged();
+    LOG_TRACE_N << "Reset done";
 }
 
+
+void AppEngine::setStateText(QString text) {
+
+    static const auto rec_names = to_array<QString>({
+        tr("Idle"),
+        tr("Preparing"),
+        tr("Ready"),
+        tr("Recording"),
+        tr("Processing"),
+        tr("Done"),
+        tr("Resetting"),
+        tr("Error")
+    });
+
+    if (text.isEmpty()) {
+        text = rec_names.at(static_cast<int>(recording_state_));
+    }
+
+    if (text != state_text_) {
+        LOG_DEBUG_N << "State text changed to: " << text.toStdString();
+        state_text_ = text;
+        emit stateTextChanged();
+    }
+}

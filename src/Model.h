@@ -120,13 +120,13 @@ public:
     virtual ModelKind kind() const noexcept  = 0;
     QCoro::Task<bool> init(const QString &modelId);
     QCoro::Task<bool> loadModel();
-    //QCoro::Task<bool> unloadModel();
+    QCoro::Task<bool> unloadModel();
 
     void cancel();
     void reset();
     QCoro::Task<void> stop();
 
-    bool cancelled() const noexcept { return state() >= State::STOPPING;}
+    bool isCancelled() const noexcept { return state() >= State::STOPPING;}
     bool haveModel() const noexcept { return model_instance_ != nullptr; }
     bool isLoaded() const noexcept { return is_loaded_; }
     State state() const noexcept {return state_.load();}
@@ -153,6 +153,7 @@ protected:
     void enqueueCommand(std::unique_ptr<Operation> && op);
 
     virtual bool createContextImpl() = 0;
+    virtual bool stopImpl() = 0;
 
 signals:
     void partialTextAvailable(const QString &text);
@@ -174,8 +175,10 @@ private:
     std::mutex mutex_;
     std::atomic_bool have_context_{false};
     std::atomic_bool is_loaded_{false};
+    bool is_stopped_{false};
 };
 
 
 std::ostream& operator << (std::ostream& os, Model::State state);
 std::ostream& operator<<(std::ostream &os, const Model::Operation& op);
+std::pair<bool /* json */, std::string /* content or json */> toLogHandler(const Model& m, bool json, std::string_view tag);

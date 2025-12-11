@@ -37,7 +37,7 @@ protected:
     bool createContextImpl() override;
     void processChunk(std::span<const uint8_t> data, bool lastChunk) override;
     void processRecording(std::span<const float> data) override;
-    //bool init() override;
+    bool stopImpl() override;
 
 private:
     bool ensureModelOnDisk();           // check + download if needed

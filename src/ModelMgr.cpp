@@ -15,6 +15,8 @@
 #include <qcoronetworkreply.h>
 #include <qcoroiodevice.h>
 
+
+#include "ScopedTimer.h"
 #include "logging.h"
 
 using namespace std;
@@ -259,7 +261,7 @@ QCoro::Task<bool> ModelMgr::downloadFile(const QString& name,
             reply->deleteLater();
         }
         if (QFile::exists(tmpPath)) {
-            LOG_DEBUG_N << "Removing temporary file: " << tmpPath.toStdString();
+            LOG_DEBUG_N << "Removing temporary file: " << tmpPath;
             QFile::remove(tmpPath);
         }
     });
@@ -384,153 +386,24 @@ QCoro::Task<bool> ModelMgr::downloadFile(const QString& name,
     co_return true;
 }
 
-
-// QCoro::Task<bool> ModelMgr::downloadFile(const QUrl& url,
-//                                          const QString& fullPath) noexcept
-// {
-//     if (!nam_) {
-//         try {
-//             nam_ = new QNetworkAccessManager(this);
-//         } catch (const std::bad_alloc&) {
-//             LOG_ERROR_N << "Failed to create QNetworkAccessManager for downloading.";
-//             co_return false;
-//         }
-//     }
-
-//     LOG_DEBUG_N << "Downloading file from URL: " << url.toString()
-//                 << " to path: " << fullPath;
-
-//     const QString tmpPath = fullPath + ".part";
-
-//     QNetworkRequest request{url};
-
-//     // Start the request immediately (no co_await here)
-//     QNetworkReply *reply = nam_->get(request);
-
-//     // Check if the reply is valid
-//     if (!reply) {
-//         LOG_ERROR_N << "Failed to start download for URL: " << url.toString();
-//         co_return false;
-//     }
-
-//     // Ensure reply gets deleted
-//     const auto guard = qScopeGuard([reply, tmpPath] {
-//         if (reply) {
-//             reply->deleteLater();
-//         }
-//         // Clean up temp file if it still exists
-//         if (QFile::exists(tmpPath)) {
-//             LOG_DEBUG_N << "Removing temporary file: " << tmpPath.toStdString();
-//             QFile::remove(tmpPath);
-//         }
-//     });
-
-//     if (reply->isFinished()) {
-//         const int httpStatus =
-//             reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-//         LOG_ERROR_N << "Download reply already finished unexpectedly with status "
-//                     << httpStatus
-//                     << " \"" << reply->attribute(QNetworkRequest::HttpReasonPhraseAttribute).toString()
-//                     << "\" for URL: " << url.toString();
-//         co_return false;
-//     }
-
-//     // Open temp file for streaming
-//     QFile out(tmpPath);
-//     if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-//         // Can't even create the .part file
-//         reply->abort();
-//         co_return false;
-//     }
-
-//     bool writeError = false;
-
-//     // Relay download progress signals
-//     QObject::connect(reply, &QNetworkReply::downloadProgress,
-//                      this, &ModelMgr::modelDownloadProgress);
-
-//     ReplyEventProxy proxy{reply, this};
-
-//     // Stream data as it comes in
-//     while (!reply->isFinished()) {
-//         // Suspend coroutine until there's data (or finished)
-//         co_await qCoro(reply, &QNetworkReply::readyRead);
-
-//         // There may be multiple chunks available
-//         while (reply->bytesAvailable() > 0) {
-//             QByteArray chunk = reply->read(64 * 1024); // 64 KiB chunks
-//             if (chunk.isEmpty()) {
-//                 break;
-//             }
-
-//             const qint64 written = out.write(chunk);
-//             if (written != chunk.size()) {
-//                 // Disk write error; abort network and bail out
-//                 writeError = true;
-//                 reply->abort();
-//                 break;
-//             }
-//         }
-
-//         if (writeError) {
-//             break;
-//         }
-//     }
-
-//     out.flush();
-//     out.close();
-
-//     if (writeError) {
-//         QFile::remove(tmpPath);
-//         co_return false;
-//     }
-
-//     // Network-level error?
-//     if (reply->error() != QNetworkReply::NoError) {
-//         LOG_ERROR_N << "Network error during file downloading "
-//             << url.toString()
-//             << ": "
-//             << reply->errorString();
-//         co_return false;
-//     }
-
-//     // HTTP status check
-//     const int httpStatus =
-//         reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-//     if (httpStatus < 200 || httpStatus >= 300) {
-//         LOG_ERROR_N << "Download error during file downloading "
-//                     << url.toString()
-//                     << ": HTTP status "
-//                     << httpStatus;
-//         co_return false;
-//     }
-
-//     // All good so far → rename .part -> final name
-//     if (!QFile::rename(tmpPath, fullPath)) {
-//         LOG_ERROR_N << "Failed to rename temporary file "
-//                     << tmpPath
-//                     << " to final path "
-//                     << fullPath;
-//         co_return false;
-//     }
-
-//     LOG_DEBUG_N << "File downloaded successfully: " << fullPath;
-
-//     co_return true;
-// }
-
 QCoro::Task<std::shared_ptr<ModelInstanceBase> > ModelMgr::getInstance(ModelKind kind, const QString &modelId) noexcept
 {
     LOG_DEBUG_N << "Requesting model instance: kind=" << kind
-                 << ", id='" << modelId.toStdString() << "'";
+                 << ", id='" << modelId << "'";
+
+    auto& inst_map = instances(kind);
 
     // See if the model is already available
     {
-        auto& inst_map = instances(kind);
-        auto it =  inst_map.find(modelId);
+        auto it = inst_map.find(modelId);
         if (it != inst_map.end()) {
-            LOG_DEBUG_N << "Found existing model instance for id='" << modelId.toStdString() << "'";
-            co_return it->second;
+            LOG_DEBUG_N << "Found existing model instance for id='" << modelId << "'";
+            assert(it->second);
+            LOG_DEBUG_N << "Returning existing model instance. Loaded=" << it->second->isLoaded();
+
+            // Weird behaviour here. `co_return it->second` empties it->second (calling `std::move()`?)
+            // The brackets force a copy of the original shared_pointer instance.
+            co_return {it->second};
         }
     }
 
@@ -550,13 +423,16 @@ QCoro::Task<std::shared_ptr<ModelInstanceBase> > ModelMgr::getInstance(ModelKind
         }
 
         if (!co_await makeAvailable(kind, instance->modelInfo())) {
-            LOG_ERROR_N << "Failed to make model available: id='" << modelId.toStdString() << "'";
+            LOG_ERROR_N << "Failed to make model available: id='" << modelId << "'";
             co_return nullptr;
         }
 
+        // Assert leftovers from finding the co_return problem above.
         assert(instance);
-        assert(!instances(kind).contains(instance->modelId()));
-        instances(kind)[modelId] = instance;
+        assert(!instances(kind).contains(modelId));
+        inst_map[modelId] = instance;
+        assert(instances(kind).contains(modelId));
+        assert(inst_map[modelId] != nullptr);
 
         co_return instance;
     }
@@ -568,7 +444,14 @@ QCoro::Task<bool> ModelInstanceBase::load() noexcept
 {
     if (++loaded_count_ == 1) {
         auto ok = co_await  QtConcurrent::run([this]() -> bool {
-            return loadImpl();
+            LOG_DEBUG_N << "Loading model instance: " << modelId();
+            ScopedTimer timer;
+            const auto ok =  loadImpl();
+            LOG_DEBUG_N << "Model instance loaded in "
+                         << timer.elapsed() << " seconds: "
+                         << modelId()
+                        << ". result=" << ok;
+            return ok;
         });
         co_return ok;
     }
@@ -581,7 +464,12 @@ QCoro::Task<bool> ModelInstanceBase::unload() noexcept
     assert(loaded_count_ > 0);
     if (--loaded_count_ ==0) {
         co_return co_await  QtConcurrent::run([this]() -> bool {
+            LOG_DEBUG_N << "Unloading model instance: " << modelId();
+            ScopedTimer timer;
             return unloadImpl();
+            LOG_DEBUG_N << "Model instance unloaded in "
+                         << timer.elapsed() << " seconds: "
+                         << modelId();
         });
     }
 

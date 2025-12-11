@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "ModelMgr.h"
 #include <whisper.h>
 
@@ -12,11 +14,17 @@ public:
     ModelKind kind() const noexcept override { return ModelKind::WHISPER;}
 
     auto *whisperCtx() noexcept {
-        return shared_ctx_;
+        assert(shared_ctx_);
+        return shared_ctx_.get();
     }
 
     const auto *whisperCtx() const noexcept {
-        return shared_ctx_;
+        assert(shared_ctx_);
+        return shared_ctx_.get();
+    }
+
+    bool haveWhisperCtx() const noexcept {
+        return shared_ctx_ != nullptr;
     }
 
     std::shared_ptr<whisper_state> newState();
@@ -26,7 +34,7 @@ protected:
     bool unloadImpl() noexcept override;
 
     void *ctx() override {
-        return shared_ctx_;
+        return shared_ctx_.get();
     }
 
     bool haveCtx() const noexcept override {
@@ -34,5 +42,5 @@ protected:
     }
 
 private:
-    whisper_context *shared_ctx_{};
+    std::shared_ptr<whisper_context> shared_ctx_;
 };

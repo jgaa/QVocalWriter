@@ -99,6 +99,7 @@ qt_add_qml_module(${PROJECT_NAME}
             src/TranscriberWhisper.h
             src/WhisperInstance.cpp
             src/WhisperInstance.h
+            QML_FILES qml/RecordingLevel.qml
 )
 
 # Add includepaths

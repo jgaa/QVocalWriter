@@ -32,6 +32,7 @@ class AppEngine : public QObject
     Q_PROPERTY(const QString& recordedText MEMBER current_recorded_text_ NOTIFY recordedTextChanged)
     Q_PROPERTY(const QStringList& michrophones READ microphones() NOTIFY microphonesChanged)
     Q_PROPERTY(int currentMic READ currentMic WRITE setCurrentMic NOTIFY currentMicChanged)
+    Q_PROPERTY(const QString& stateText MEMBER state_text_ NOTIFY stateTextChanged)
 
 public:
     enum RecordingState {
@@ -85,6 +86,7 @@ signals:
     void recordedTextChanged();
     void microphonesChanged();
     void currentMicChanged();
+    void stateTextChanged();
 
 private:
     RecordingState recordingState() const { return recording_state_; }
@@ -102,6 +104,7 @@ private:
     QCoro::Task<void> onRecordingDone();
     bool failed(const QString& why);
     QCoro::Task<void> doReset();
+    void setStateText(QString text = {});
 
     AudioController audio_controller_;
     RecordingState recording_state_ = Idle;
@@ -119,6 +122,7 @@ private:
     std::shared_ptr<ModelMgr> model_mgr_;
     qreal recording_level_{};
     QString current_recorded_text_;
+    QString state_text_;
 };
 
 std::ostream& operator << (std::ostream& os, AppEngine::RecordingState state);

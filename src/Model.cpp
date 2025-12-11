@@ -14,17 +14,22 @@
 
 using namespace std;
 
-
-namespace logfault {
-std::pair<bool /* json */, std::string /* content or json */> toLog(const Model& m, bool json) {
+std::pair<bool /* json */, std::string /* content or json */> toLogHandler(const Model& m, bool json, std::string_view tag) {
     if (json) {
-        return make_pair(true, format(R"("model":"{}",)",
+        return make_pair(true, format(R"("model":"{}", "name":"{}")",
+                                      tag,
                                       m.name()
                                       ));
     }
 
-    return make_pair(false, format("Model{{name={}}}",
+    return make_pair(false, format("{}{{name={}}}",
+                                   tag,
                                    m.name()));
+}
+
+namespace logfault {
+std::pair<bool /* json */, std::string /* content or json */> toLog(const Model& m, bool json) {
+    return toLogHandler(m, json, "Model");
 }
 } // logfault ns
 
@@ -68,6 +73,7 @@ Model::Model(std::string name, std::unique_ptr<Model::Config> && config)
 
 Model::~Model()
 {
+    LOG_DEBUG_EX(*this) << "Destroying model...";
     stop();
 
     if (is_loaded_) {
@@ -105,6 +111,7 @@ QCoro::Task<bool> Model::loadModel()
     }
 
     if (!createContextImpl()) {
+        co_await model_instance_->unload();
         failed(tr("Failed to create context on the model"));
         co_return false;
     }
@@ -125,8 +132,23 @@ QCoro::Task<bool> Model::loadModel()
     co_return true;
 }
 
+QCoro::Task<bool> Model::unloadModel()
+{
+    bool ok = true;
+    if (is_loaded_) {
+        ok = co_await model_instance_->unload();
+        is_loaded_ = false;
+    }
+
+    co_return ok;
+}
+
 QCoro::Task<void> Model::stop()
 {
+    if (is_stopped_) {
+        LOG_TRACE_EX(*this) << "Model already stopped.";
+        co_return;
+    }
     if(state() < State::STOPPING) {
         LOG_DEBUG_EX(*this) << "Stopping model...";
         enqueueCommand(std::make_unique<Operation>(CmdType::EXIT));
@@ -134,7 +156,7 @@ QCoro::Task<void> Model::stop()
 
     // Wait for the stopped signal
     LOG_DEBUG_EX(*this) << "Waiting for model to stop...";
-    co_await qCoro(this, &Model::stopped);
+    // co_await qCoro(this, &Model::stopped);
 
     // Join the thread
     if (worker_ && worker_->joinable()) {
@@ -143,6 +165,8 @@ QCoro::Task<void> Model::stop()
         LOG_DEBUG_EX(*this) << "Model worker thread joined.";
     }
 
+    co_await unloadModel();
+    is_stopped_ = true;
     co_return;
 }
 
@@ -206,8 +230,7 @@ void Model::run() noexcept
                     LOG_DEBUG_EX(*this) << ": Exit command received, stopping model...";
                     setState(State::STOPPING);
 
-                    // TODO: Implement and set the correct restlt
-                    //stopImpl();
+                    stopImpl();
                     op->setResult(true);
                     break;
                 default:

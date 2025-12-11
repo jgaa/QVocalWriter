@@ -10,12 +10,9 @@
 #include "logging.h"
 
 namespace logfault {
-std::pair<bool /* json */, std::string /* content or json */> toLog(const Transcriber& m, bool json) {
-    return toLog(dynamic_cast<const Model&>(m), json);
-}
 
 std::pair<bool /* json */, std::string /* content or json */> toLog(const TranscriberWhisper& m, bool json) {
-    return toLog(dynamic_cast<const Model&>(m), json);
+    return toLogHandler(m, json, "TranscriberWhisper");
 }
 } // logfault ns
 
@@ -202,6 +199,11 @@ bool TranscriberWhisper::createContextImpl()
 
 void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastChunk)
 {
+    if (isCancelled()) {
+        LOG_WARN_EX(*this) << "Callen when cancelled. Ignoring.";
+        return;
+    }
+
     assert(w_ctx_ != nullptr);
     if (!w_ctx_)
         return;
@@ -321,6 +323,13 @@ void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastCh
         params.token_timestamps = true;
     }
 
+    params.encoder_begin_callback_user_data = this;
+    params.encoder_begin_callback = [](struct whisper_context * ctx, struct whisper_state * state, void * user_data) -> bool {
+        auto * self = reinterpret_cast<TranscriberWhisper *>(user_data);
+        LOG_TRACE_EX(*self) << "Whisper encoder begin callback called in state " << self->state();
+        return self->isCancelled() == false;
+    };
+
     // --- 5) Run Whisper on the current sliding buffer --------------------
 
     LOG_TRACE_EX(*this) << "Calling whisper_full() with "
@@ -335,6 +344,11 @@ void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastCh
         pcm_.data(),
         pcm_fill_
         );
+
+    if (isCancelled()) {
+        LOG_DEBUG_EX(*this) << "Cancelled during whisper_full() call. Aborting furtner processing.";
+        return;
+    }
 
     const auto duration = std::chrono::steady_clock::now() - when;
     LOG_DEBUG_EX(*this) << "whisper_full() returned rc =" << rc
@@ -446,8 +460,15 @@ void TranscriberWhisper::processRecording(std::span<const float> data)
 
     if (config().submit_filal_text) {
         LOG_TRACE_EX(*this) << "Emitting final text:" << final_text_;
-        emit finalTextAvailable(final_text_);
+        emit Model::finalTextAvailable(final_text_);
     }
+}
+
+bool TranscriberWhisper::stopImpl()
+{
+    LOG_DEBUG_EX(*this) << "TranscriberWhisper::stopImpl called";
+    // Nothing special to do here for Whisper
+    return true;
 }
 
 
