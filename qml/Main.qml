@@ -171,4 +171,28 @@ Window {
             }
         }
     }
+
+    // BUSY SPINNER OVERLAY
+    Rectangle {
+        id: busyOverlay
+        anchors.fill: parent
+        visible: appEngine.isBusy
+        enabled: visible
+        z: 999
+        color: "#60000000"   // dim background
+
+        // Block all interaction beneath
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.AllButtons
+            hoverEnabled: true
+        }
+
+        BusyIndicator {
+            anchors.centerIn: parent
+            running: appEngine.isBusy
+            width: 64
+            height: 64
+        }
+    }
 }

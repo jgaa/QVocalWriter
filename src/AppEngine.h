@@ -28,6 +28,7 @@ class AppEngine : public QObject
     Q_PROPERTY(bool canPrepare READ canPrepare NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canStart READ canStart NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canStop READ canStop NOTIFY stateFlagsChanged)
+    Q_PROPERTY(bool isBusy READ isBusy NOTIFY stateFlagsChanged)
     Q_PROPERTY(const qreal& recordingLevel MEMBER recording_level_ NOTIFY recordingLevelChanged)
     Q_PROPERTY(const QString& recordedText MEMBER current_recorded_text_ NOTIFY recordedTextChanged)
     Q_PROPERTY(const QStringList& michrophones READ microphones() NOTIFY microphonesChanged)
@@ -72,6 +73,7 @@ public:
     bool canPrepare() const;
     bool canStart()   const;
     bool canStop()    const;
+    bool isBusy()     const;
 
 signals:
     void recordingStateChanged(RecordingState newState);

@@ -18,6 +18,8 @@ Rectangle {
         anchors.left : parent.left
         anchors.top : parent.top
         anchors.bottom : parent.bottom
+        radius: height / 2
+        clip: true
 
         // Use appEngine.recordingLevel (0..1) horizontally
         width: parent.width * Math.max(0, Math.min(1, appEngine.recordingLevel))

@@ -242,6 +242,12 @@ bool AppEngine::canStop() const
            || recording_state_ == RecordingState::Processing;
 }
 
+bool AppEngine::isBusy() const
+{
+    return recordingState() == RecordingState::Processing
+           || recordingState() == RecordingState::Preparing;
+}
+
 void AppEngine::setLanguageIndex(int index)
 {
     assert(index >= 0 && index < int(language_table.size()));
