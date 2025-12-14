@@ -11,6 +11,8 @@ set(QCORO_WITH_QTQUICK OFF CACHE BOOL "" FORCE)
 set(QCORO_WITH_QML     OFF CACHE BOOL "" FORCE)
 set(QCORO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 
+set(QVW_ROOT=${CMAKE_CURRENT_SOURCE_DIR})
+
 
 include(FetchContent)
 FetchContent_Declare(
@@ -20,26 +22,43 @@ FetchContent_Declare(
   #GIT_TAG
 )
 
-# whisper.cpp
-FetchContent_Declare(
-  whisper_cpp
-  GIT_REPOSITORY https://github.com/ggml-org/whisper.cpp.git
-  GIT_TAG v1.8.2
-)
+# # llama.cpp
+# FetchContent_Declare(
+#   llama_cpp
+#   GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
+#   # Prefer pinning to a release tag or commit for reproducible builds:
+#   GIT_TAG master
+# )
+
+# CPU-only: disable all GPU/backends for now
+set(GGML_CUDA     OFF CACHE BOOL "" FORCE)
+set(GGML_HIPBLAS  OFF CACHE BOOL "" FORCE)
+set(GGML_VULKAN   OFF CACHE BOOL "" FORCE)
+set(GGML_METAL    OFF CACHE BOOL "" FORCE)
+set(GGML_SYCL     OFF CACHE BOOL "" FORCE)
+set(GGML_OPENCL   OFF CACHE BOOL "" FORCE)
+set(GGML_RPC      OFF CACHE BOOL "" FORCE)
+set(GGML_KOMPUTE  OFF CACHE BOOL "" FORCE)
+set(GGML_CANN     OFF CACHE BOOL "" FORCE)
+set(GGML_MUSA     OFF CACHE BOOL "" FORCE)
+
+# Also keep BLAS off for now (simple/portable CPU baseline)
+set(GGML_BLAS     OFF CACHE BOOL "" FORCE)
+set(GGML_OPENBLAS OFF CACHE BOOL "" FORCE)
+
+
+# # whisper.cpp
+# FetchContent_Declare(
+#   whisper_cpp
+#   GIT_REPOSITORY https://github.com/ggml-org/whisper.cpp.git
+#   GIT_TAG master
+# )
 
 # Configure whisper.cpp BEFORE MakeAvailable
 # (these are CMake options defined by whisper.cpp itself)
-set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(WHISPER_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
-set(WHISPER_BUILD_SERVER   OFF CACHE BOOL "" FORCE)
-
-# CPU-only, no CUDA/Metal/etc for now – keeps it simple & portable
-set(GGML_CUDA       OFF CACHE BOOL "" FORCE)
-set(GGML_HIPBLAS    OFF CACHE BOOL "" FORCE)
-set(GGML_VULKAN     OFF CACHE BOOL "" FORCE)
-set(GGML_METAL      OFF CACHE BOOL "" FORCE)
-set(GGML_OPENBLAS   OFF CACHE BOOL "" FORCE)
-set(GGML_BLAS       OFF CACHE BOOL "" FORCE)
+# set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+# set(WHISPER_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
+# set(WHISPER_BUILD_SERVER   OFF CACHE BOOL "" FORCE)
 
 # QCoro (coroutines for Qt5/Qt6)
 FetchContent_Declare(
@@ -48,7 +67,10 @@ FetchContent_Declare(
   GIT_TAG v0.12.0
 )
 
-FetchContent_MakeAvailable(logfault_src whisper_cpp qcoro)
+#FetchContent_MakeAvailable(logfault_src llama_cpp whisper_cpp qcoro)
+# FetchContent_MakeAvailable(whisper_cpp)
+# FetchContent_MakeAvailable(llama_cpp)
+FetchContent_MakeAvailable(logfault_src qcoro)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Quick Qml Multimedia)
 find_package(Qt6 REQUIRED COMPONENTS Core)
@@ -56,8 +78,8 @@ find_package(Qt6 REQUIRED COMPONENTS Core)
 qt_standard_project_setup(REQUIRES 6.4)
 
 qt_add_executable(${PROJECT_NAME}
-    src/main.cpp
-    src/logging.h
+    src/app/main.cpp
+    src/app/logging.h
 )
 
 
@@ -71,40 +93,43 @@ qt_add_qml_module(${PROJECT_NAME}
     VERSION 1.0
     QML_FILES
         QML_FILES
+            qml/RecordingLevel.qml
             qml/RecordingPane.qml
             qml/Main.qml
         SOURCES
-            src/AppEngine.cpp
-            src/AppEngine.h
-            src/AudioCaptureDevice.cpp
-            src/AudioCaptureDevice.h
-            src/AudioController.cpp
-            src/AudioController.h
-            src/AudioFileWriter.cpp
-            src/AudioFileWriter.h
-            src/AudioRecorder.cpp
-            src/AudioRecorder.h
-            src/AudioRingBuffer.cpp
-            src/AudioRingBuffer.h
-            src/Model.cpp
-            src/Model.h
-            src/ModelInfo.h
-            src/ModelMgr.cpp
-            src/ModelMgr.h
-            src/Queue.h
-            src/ScopedTimer.h
-            src/Transcriber.cpp
-            src/Transcriber.h
-            src/TranscriberWhisper.cpp
-            src/TranscriberWhisper.h
-            src/WhisperInstance.cpp
-            src/WhisperInstance.h
-            QML_FILES qml/RecordingLevel.qml
+            src/app/AppEngine.cpp
+            src/app/AppEngine.h
+            src/app/AudioCaptureDevice.cpp
+            src/app/AudioCaptureDevice.h
+            src/app/AudioController.cpp
+            src/app/AudioController.h
+            src/app/AudioFileWriter.cpp
+            src/app/AudioFileWriter.h
+            src/app/AudioRecorder.cpp
+            src/app/AudioRecorder.h
+            src/app/AudioRingBuffer.cpp
+            src/app/AudioRingBuffer.h
+            src/app/Model.cpp
+            src/app/Model.h
+            src/app/ModelInfo.h
+            src/app/ModelMgr.cpp
+            src/app/ModelMgr.h
+            src/app/Queue.h
+            src/app/ScopedTimer.h
+            src/app/Transcriber.cpp
+            src/app/Transcriber.h
+            src/app/TranscriberWhisper.cpp
+            src/app/TranscriberWhisper.h
+            src/app/WhisperInstance.cpp
+            src/app/WhisperInstance.h
+            include/qvw/EngineBase.h
+            include/qvw/WhisperEngine.h
 )
 
 # Add includepaths
 target_include_directories(${PROJECT_NAME} PRIVATE
    ${QML_INCLUDES}
+   ${QVW_ROOT}/include
 )
 
 
@@ -117,6 +142,7 @@ target_link_libraries(${PROJECT_NAME}
         logfault::logfault
         #whisper_cpp::whisper_cpp
         whisper
+        llama
         QCoro6::Core
         QCoro6::Network
 )

@@ -91,52 +91,6 @@ QString assembleTranscript(const QVector<TranscriptSegment> &segments)
 
 } // anon ns
 
-// TranscriberWhisper::TranscriberWhisper(chunk_queue_t *queue, const QString &filePath, QAudioFormat format)
-// : Transcriber(queue, filePath, format)
-// {
-//     whisper_log_set(whisperLogger, nullptr);
-// }
-
-// TranscriberWhisper::~TranscriberWhisper()
-// {
-//     LOG_DEBUG_EX(*this) << "TranscriberWhisper: destructor called";
-//     if (ctx_) {
-//         LOG_DEBUG_EX(*this) << "TranscriberWhisper: freeing whisper context";
-//         whisper_free(ctx_);
-//         ctx_ = nullptr;
-//     }
-
-//     LOG_TRACE_EX(*this) << "TranscriberWhisper: destructor finished";
-// }
-
-
-
-// bool TranscriberWhisper::loadModelContext()
-// {
-//     const QString modelPath = resolveModelPath();
-//     whisper_context_params cparams = whisper_context_default_params();
-
-//     // Optionally modify defaults:
-//     cparams.use_gpu = false;          // TODO: Make optional later
-//     cparams.flash_attn = false;       // TODO: Make optional later (require gpu)
-//     cparams.gpu_device = 0;           // ignored for CPU mode
-
-//     // DTW features are advanced; keep disabled for now
-//     cparams.dtw_token_timestamps = false;
-//     cparams.dtw_aheads_preset = WHISPER_AHEADS_NONE;
-//     cparams.dtw_n_top = 0;            // default means let whisper choose
-
-//     LOG_DEBUG_EX(*this) << "Loading Whisper model from " << modelPath.toStdString();
-//     ctx_ = whisper_init_from_file_with_params(modelPath.toUtf8().constData(), cparams);
-
-//     if (!ctx_) {
-//         emit errorOccurred(tr("Failed to load Whisper model from %1").arg(modelPath));
-//         return false;
-//     }
-
-//     return true;
-// }
-
 void TranscriberWhisper::startSession()
 {
     const int windowSamples = (window_ms_ * sample_rate_) / 1000;
