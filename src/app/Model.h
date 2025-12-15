@@ -139,7 +139,7 @@ public:
         return *config_;
     }
 
-    std::shared_ptr<ModelInstanceBase> modelInstance() const noexcept {
+    std::shared_ptr<ModelInstance> modelInstance() const noexcept {
         return model_instance_;
     }
 
@@ -168,7 +168,7 @@ private:
 
     std::string name_;
     std::unique_ptr<Config> config_;
-    std::shared_ptr<ModelInstanceBase> model_instance_;
+    std::shared_ptr<ModelInstance> model_instance_;
     std::atomic<State> state_{State::CREATED};
     std::optional<std::jthread> worker_;
     cmd_queue_t cmd_queue_;

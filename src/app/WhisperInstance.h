@@ -5,7 +5,7 @@
 #include "ModelMgr.h"
 #include <whisper.h>
 
-class WhisperInstance final : public ModelInstanceBase
+class WhisperInstance final : public ModelInstance
 {
 public:
     WhisperInstance(const ModelInfo& modelInfo, const QString& fullPath);

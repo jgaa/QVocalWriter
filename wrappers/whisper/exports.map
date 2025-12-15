@@ -1,0 +1,7 @@
+{
+  global:
+    _ZN3qvw*;
+    qvw_*;
+  local:
+    *;
+};

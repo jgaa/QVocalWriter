@@ -117,13 +117,13 @@ QCoro::Task<bool> Model::loadModel()
     }
 
     // Relay signals
-    connect(model_instance_.get(), &ModelInstanceBase::modelReady,
+    connect(model_instance_.get(), &ModelInstance::modelReady,
             this, &Model::modelReady);
-    connect(model_instance_.get(), &ModelInstanceBase::partialTextAvailable,
+    connect(model_instance_.get(), &ModelInstance::partialTextAvailable,
             this, &Model::partialTextAvailable);
 
     if (config().submit_filal_text) {
-        connect(model_instance_.get(), &ModelInstanceBase::finalTextAvailable,
+        connect(model_instance_.get(), &ModelInstance::finalTextAvailable,
                 this, &Model::finalTextAvailable);
     }
 

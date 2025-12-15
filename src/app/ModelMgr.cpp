@@ -386,7 +386,7 @@ QCoro::Task<bool> ModelMgr::downloadFile(const QString& name,
     co_return true;
 }
 
-QCoro::Task<std::shared_ptr<ModelInstanceBase> > ModelMgr::getInstance(ModelKind kind, const QString &modelId) noexcept
+QCoro::Task<ModelMgr::model_ctx_t> ModelMgr::getInstance(ModelKind kind, const QString &modelId) noexcept
 {
     LOG_DEBUG_N << "Requesting model instance: kind=" << kind
                  << ", id='" << modelId << "'";
@@ -409,7 +409,7 @@ QCoro::Task<std::shared_ptr<ModelInstanceBase> > ModelMgr::getInstance(ModelKind
 
     if (auto best_model = findBestModel(kind, modelId)) {
         const auto path = findModelPath(kind, *best_model);
-        std::shared_ptr<ModelInstanceBase> instance;
+        std::shared_ptr<ModelInstance> instance;
         switch (kind) {
             case ModelKind::WHISPER:
                 instance = std::make_shared<WhisperInstance>(*best_model, QString::fromUtf8(path.string()));
@@ -440,7 +440,7 @@ QCoro::Task<std::shared_ptr<ModelInstanceBase> > ModelMgr::getInstance(ModelKind
     co_return nullptr;
 }
 
-QCoro::Task<bool> ModelInstanceBase::load() noexcept
+QCoro::Task<bool> ModelInstance::load() noexcept
 {
     if (++loaded_count_ == 1) {
         auto ok = co_await  QtConcurrent::run([this]() -> bool {
@@ -459,7 +459,7 @@ QCoro::Task<bool> ModelInstanceBase::load() noexcept
     co_return true;
 }
 
-QCoro::Task<bool> ModelInstanceBase::unload() noexcept
+QCoro::Task<bool> ModelInstance::unload() noexcept
 {
     assert(loaded_count_ > 0);
     if (--loaded_count_ ==0) {
@@ -476,7 +476,7 @@ QCoro::Task<bool> ModelInstanceBase::unload() noexcept
     co_return true;
 }
 
-bool ModelInstanceBase::unloadNow() noexcept
+bool ModelInstance::unloadNow() noexcept
 {
     assert(loaded_count_ > 0);
     if (loaded_count_ > 0) {

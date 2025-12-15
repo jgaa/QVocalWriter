@@ -6,6 +6,7 @@
 #include <thread>
 
 #include "qvw/WhisperEngine.h"
+#include "qvw/log_wrapper.h"
 
 #include <whisper.h>
 
@@ -72,6 +73,8 @@ public:
     shared_ptr<SessionCtx> newSession() override {
         assert(ctx_ != nullptr);
 
+        LOG_DEBUG << "Creating new Whisper session for model " << model_id_;
+
         if (auto state = whisper_init_state(ctx_)) {
             auto s = make_shared<WhisperSessionCtxImpl>(shared_from_this(), state);
             return s;
@@ -96,12 +99,13 @@ private:
 
 class WhisperImpl final : public WhisperEngine {
 public:
-    WhisperImpl() {
-
+    WhisperImpl(const WhisperCreateParams& params)
+    {
+        LOG_DEBUG << "Creating Whisper engine";
     }
 
     ~WhisperImpl() override {
-
+        LOG_DEBUG << "Destroying Whisper engine with " << num_loaded_models_ << " loaded models";
     }
 
     // EngineBase interface
@@ -116,6 +120,8 @@ public:
 
     bool init() override {
         // No specific init for whisper.cpp
+
+        LOG_INFO << "Whisper engine initialized";
         return clearError();
     }
 
@@ -125,6 +131,8 @@ public:
 
     shared_ptr<ModelCtx> load(const string &modelId, const filesystem::path &modelPath, const EngineLoadParams &params) override {
         whisper_context_params cparams = whisper_context_default_params();
+
+        LOG_DEBUG << "Loading Whisper model " << modelId << " from " << modelPath;
 
         // Set default params
         // Optionally modify defaults:
@@ -152,7 +160,7 @@ public:
             return modelCtx; // When the shared pointer goes out of scope, the model context is unloaded
         }
 
-
+        LOG_ERROR << "Failed to load Whisper model from " << modelPath;
         setError(format("Failed to load Whisper model from {}", modelPath.string()));
         return {};
 
@@ -204,12 +212,17 @@ const EngineBase &WhisperCtxImpl::engine() const noexcept
 WhisperSessionCtxImpl::WhisperSessionCtxImpl(shared_ptr<WhisperCtxImpl> modelCtx, whisper_state *state)
     : model_ctx_{std::move(modelCtx)}, state_{state}
 {
+    LOG_DEBUG << "Created Whisper session context";
     assert(model_ctx_ != nullptr);
     assert(state_ != nullptr);
 }
 
 bool WhisperSessionCtxImpl::whisperFull(std::span<const float> data, const WhisperFullParams &params) {
     auto p = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+
+    LOG_TRACE << "Starting full whisper processing with "
+              << (params.language.empty() ? "auto-detect language" : format("language='{}'", params.language))
+              << ", threads=" << params.threads;
 
     p.print_progress   = false;
     p.print_realtime   = false;
@@ -242,6 +255,11 @@ bool WhisperSessionCtxImpl::whisperFull(std::span<const float> data, const Whisp
 
 } // anon ns
 
+std::shared_ptr<WhisperEngine> WhisperEngine::create(const WhisperCreateParams &params)
+{
+    LOG_DEBUG << "Creating Whisper engine instance";
+    return make_shared<WhisperImpl>(params);
+}
 
 
 } // ns

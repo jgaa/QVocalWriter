@@ -30,21 +30,21 @@ FetchContent_Declare(
 #   GIT_TAG master
 # )
 
-# CPU-only: disable all GPU/backends for now
-set(GGML_CUDA     OFF CACHE BOOL "" FORCE)
-set(GGML_HIPBLAS  OFF CACHE BOOL "" FORCE)
-set(GGML_VULKAN   OFF CACHE BOOL "" FORCE)
-set(GGML_METAL    OFF CACHE BOOL "" FORCE)
-set(GGML_SYCL     OFF CACHE BOOL "" FORCE)
-set(GGML_OPENCL   OFF CACHE BOOL "" FORCE)
-set(GGML_RPC      OFF CACHE BOOL "" FORCE)
-set(GGML_KOMPUTE  OFF CACHE BOOL "" FORCE)
-set(GGML_CANN     OFF CACHE BOOL "" FORCE)
-set(GGML_MUSA     OFF CACHE BOOL "" FORCE)
+# # CPU-only: disable all GPU/backends for now
+# set(GGML_CUDA     OFF CACHE BOOL "" FORCE)
+# set(GGML_HIPBLAS  OFF CACHE BOOL "" FORCE)
+# set(GGML_VULKAN   OFF CACHE BOOL "" FORCE)
+# set(GGML_METAL    OFF CACHE BOOL "" FORCE)
+# set(GGML_SYCL     OFF CACHE BOOL "" FORCE)
+# set(GGML_OPENCL   OFF CACHE BOOL "" FORCE)
+# set(GGML_RPC      OFF CACHE BOOL "" FORCE)
+# set(GGML_KOMPUTE  OFF CACHE BOOL "" FORCE)
+# set(GGML_CANN     OFF CACHE BOOL "" FORCE)
+# set(GGML_MUSA     OFF CACHE BOOL "" FORCE)
 
-# Also keep BLAS off for now (simple/portable CPU baseline)
-set(GGML_BLAS     OFF CACHE BOOL "" FORCE)
-set(GGML_OPENBLAS OFF CACHE BOOL "" FORCE)
+# # Also keep BLAS off for now (simple/portable CPU baseline)
+# set(GGML_BLAS     OFF CACHE BOOL "" FORCE)
+# set(GGML_OPENBLAS OFF CACHE BOOL "" FORCE)
 
 
 # # whisper.cpp
@@ -71,6 +71,52 @@ FetchContent_Declare(
 # FetchContent_MakeAvailable(whisper_cpp)
 # FetchContent_MakeAvailable(llama_cpp)
 FetchContent_MakeAvailable(logfault_src qcoro)
+
+
+# ---------- Externally built libraries begin
+
+
+include(ExternalProject)
+
+set(QVW_DEPS_PREFIX "${CMAKE_BINARY_DIR}/_deps_install")
+
+ExternalProject_Add(qvw_whisper_wrap_ep
+  SOURCE_DIR  "${CMAKE_SOURCE_DIR}/wrappers/whisper"
+
+  CMAKE_ARGS
+    -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}
+    -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=${QVW_DEPS_PREFIX}/lib
+    -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=<BINARY_DIR>/private-archives
+
+  BUILD_COMMAND
+    ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG>
+
+  INSTALL_COMMAND ""
+
+  BUILD_BYPRODUCTS
+    ${QVW_DEPS_PREFIX}/lib/libqvw_whisper_wrap.so
+)
+
+# Create an imported target that your app links to
+add_library(qvw::whisper_wrap SHARED IMPORTED GLOBAL)
+
+set_target_properties(qvw::whisper_wrap PROPERTIES
+  IMPORTED_LOCATION "${QVW_DEPS_PREFIX}/lib/libqvw_whisper_wrap.so"
+  #INTERFACE_INCLUDE_DIRECTORIES "${QVW_DEPS_PREFIX}/include"
+)
+
+add_dependencies(qvw::whisper_wrap qvw_whisper_wrap_ep)
+
+# Link from your app
+# target_link_libraries(QVocalWriter PRIVATE qvw::whisper_wrap)
+
+# Ensure runtime loader can find it when running from build tree
+# if(UNIX AND NOT APPLE)
+#   set_property(TARGET QVocalWriter PROPERTY BUILD_RPATH "${QVW_DEPS_PREFIX}/lib")
+# endif()
+
+
+# ---------- Externally built libraries end
 
 find_package(Qt6 REQUIRED COMPONENTS Core Quick Qml Multimedia)
 find_package(Qt6 REQUIRED COMPONENTS Core)
@@ -120,16 +166,17 @@ qt_add_qml_module(${PROJECT_NAME}
             src/app/Transcriber.h
             src/app/TranscriberWhisper.cpp
             src/app/TranscriberWhisper.h
-            src/app/WhisperInstance.cpp
-            src/app/WhisperInstance.h
+            # src/app/WhisperInstance.cpp
+            # src/app/WhisperInstance.h
             include/qvw/EngineBase.h
             include/qvw/WhisperEngine.h
+            SOURCES include/qvw/log_wrapper.h
 )
 
 # Add includepaths
 target_include_directories(${PROJECT_NAME} PRIVATE
    ${QML_INCLUDES}
-   ${QVW_ROOT}/include
+   ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 
@@ -141,8 +188,9 @@ target_link_libraries(${PROJECT_NAME}
         Qt6::Multimedia
         logfault::logfault
         #whisper_cpp::whisper_cpp
-        whisper
-        llama
+        # whisper
+        # llama
+        qvw::whisper_wrap
         QCoro6::Core
         QCoro6::Network
 )

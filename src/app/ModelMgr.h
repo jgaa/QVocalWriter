@@ -8,6 +8,7 @@
 
 #include <qcorotask.h>
 
+#include "qvw/EngineBase.h"
 #include "ModelInfo.h"
 
 /*! Model Manager
@@ -28,10 +29,10 @@ enum class ModelKind {
 
 
 // Instance of a model
-class ModelInstanceBase : public QObject{
+class ModelInstance : public QObject{
     Q_OBJECT
 public:
-    ModelInstanceBase(const ModelInfo& modelInfo, QString fullPath, QObject *parent = nullptr)
+    ModelInstance(const ModelInfo& modelInfo, QString fullPath, QObject *parent = nullptr)
         : QObject(parent), full_path_{fullPath}, model_info_{modelInfo} {}
 
     virtual ModelKind kind() const noexcept = 0;
@@ -61,17 +62,18 @@ signals:
     void finalTextAvailable(const QString &text);
     void modelReady();
 
-protected:
-    virtual bool loadImpl() noexcept = 0;
-    virtual bool unloadImpl() noexcept = 0;
-    virtual void *ctx() = 0 ;
-    virtual bool haveCtx() const noexcept = 0 ;
+// protected:
+//     virtual bool loadImpl() noexcept = 0;
+//     virtual bool unloadImpl() noexcept = 0;
+//     virtual void *ctx() = 0 ;
+//     virtual bool haveCtx() const noexcept = 0 ;
 
 private:
     QString full_path_;
     int loaded_count_{};
     ModelInfo model_info_;
     QString model_id_{QString::fromUtf8(model_info_.id)};
+    std::shared_ptr<qvw::ModelCtx> model_ctx_;
 };
 
 class ReplyEventProxy : public QObject {
@@ -117,6 +119,8 @@ class ModelMgr : public QObject
     Q_OBJECT
 
 public:
+    using model_ctx_t = std::shared_ptr<ModelInstance>;
+
     explicit ModelMgr(QObject *parent = nullptr);
 
     static ModelMgr& instance() {
@@ -132,7 +136,7 @@ public:
      \param modelId The identifier of the model to load.
      \return A coro-task that resolves to a shared pointer to the model instance.
     */
-    QCoro::Task<std::shared_ptr<ModelInstanceBase>> getInstance(ModelKind kind, const QString& modelId) noexcept;
+    QCoro::Task<model_ctx_t> getInstance(ModelKind kind, const QString& modelId) noexcept;
 
     model_list_t availableModels(ModelKind kind) const noexcept;
     models_t loadedModels(ModelKind kind) const noexcept;
@@ -144,7 +148,7 @@ signals:
     void stateChanged();
 
 private:
-    using instances_map_t = std::map<QString /* model id */, std::shared_ptr<ModelInstanceBase>>;
+    using instances_map_t = std::map<QString /* model id */, std::shared_ptr<ModelInstance>>;
     QCoro::Task<bool> makeAvailable(ModelKind kind, const ModelInfo& modelInfo) noexcept;
     std::filesystem::path findModelPath(ModelKind kind, const ModelInfo &modelInfo) const;
     QCoro::Task<bool> downloadModel(ModelKind kind, const ModelInfo &modelInfo, const QString& fullPath) noexcept;

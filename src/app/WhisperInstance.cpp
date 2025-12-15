@@ -6,7 +6,7 @@
 using namespace std;
 
 WhisperInstance::WhisperInstance(const ModelInfo &modelInfo, const QString& fullPath)
-    : ModelInstanceBase(modelInfo, fullPath)
+    : ModelInstance(modelInfo, fullPath)
 {
 }
 

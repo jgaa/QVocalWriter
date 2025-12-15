@@ -2,7 +2,7 @@
 #include <QNetworkReply>
 #include <QEventLoop>
 
-#include <whisper.h>
+//#include <whisper.h>
 #include <string_view>
 
 #include "TranscriberWhisper.h"
