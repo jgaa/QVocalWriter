@@ -137,48 +137,49 @@ set(QML_INCLUDES
 qt_add_qml_module(${PROJECT_NAME}
     URI ${PROJECT_NAME}
     VERSION 1.0
-    QML_FILES
-        QML_FILES
-            qml/RecordingLevel.qml
-            qml/RecordingPane.qml
-            qml/Main.qml
-        SOURCES
-            src/app/AppEngine.cpp
-            src/app/AppEngine.h
-            src/app/AudioCaptureDevice.cpp
-            src/app/AudioCaptureDevice.h
-            src/app/AudioController.cpp
-            src/app/AudioController.h
-            src/app/AudioFileWriter.cpp
-            src/app/AudioFileWriter.h
-            src/app/AudioRecorder.cpp
-            src/app/AudioRecorder.h
-            src/app/AudioRingBuffer.cpp
-            src/app/AudioRingBuffer.h
-            src/app/Model.cpp
-            src/app/Model.h
-            src/app/ModelInfo.h
-            src/app/ModelMgr.cpp
-            src/app/ModelMgr.h
-            src/app/Queue.h
-            src/app/ScopedTimer.h
-            src/app/Transcriber.cpp
-            src/app/Transcriber.h
-            src/app/TranscriberWhisper.cpp
-            src/app/TranscriberWhisper.h
-            # src/app/WhisperInstance.cpp
-            # src/app/WhisperInstance.h
-            include/qvw/EngineBase.h
-            include/qvw/WhisperEngine.h
-            SOURCES include/qvw/log_wrapper.h
+      QML_FILES
+          qml/RecordingLevel.qml
+          qml/RecordingPane.qml
+          qml/Main.qml
+      SOURCES
+          include/qvw/EngineBase.h
+          include/qvw/WhisperEngine.h
+          include/qvw/log_wrapper.h
+          src/app/AppEngine.cpp
+          src/app/AppEngine.h
+          src/app/AudioCaptureDevice.cpp
+          src/app/AudioCaptureDevice.h
+          src/app/AudioController.cpp
+          src/app/AudioController.h
+          src/app/AudioFileWriter.cpp
+          src/app/AudioFileWriter.h
+          src/app/AudioRecorder.cpp
+          src/app/AudioRecorder.h
+          src/app/AudioRingBuffer.cpp
+          src/app/AudioRingBuffer.h
+          src/app/Model.cpp
+          src/app/Model.h
+          src/app/ModelInfo.h
+          src/app/ModelMgr.cpp
+          src/app/ModelMgr.h
+          src/app/Queue.h
+          src/app/ScopedTimer.h
+          src/app/Transcriber.cpp
+          src/app/Transcriber.h
+          src/app/TranscriberWhisper.cpp
+          src/app/TranscriberWhisper.h
 )
 
 # Add includepaths
 target_include_directories(${PROJECT_NAME} PRIVATE
    ${QML_INCLUDES}
+   ${CMAKE_CURRENT_SOURCE_DIR}/src/app
    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+target_compile_options(${PROJECT_NAME} PRIVATE -frtti)
+
+add_dependencies(${PROJECT_NAME} qvw_whisper_wrap_ep)
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE

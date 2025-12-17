@@ -13,6 +13,7 @@
 namespace qvw {
 
 class EngineBase;
+class WhisperSessionCtx;
 
 /*! Parameters for loading the model.
  *
@@ -72,7 +73,7 @@ public:
      *
      * @return Shared pointer to the new session context, or nullptr on failure.
      */
-    virtual std::shared_ptr<SessionCtx> newSession() = 0;
+    virtual std::shared_ptr<WhisperSessionCtx> createWhisperSession() = 0;
 };
 
 
@@ -123,7 +124,7 @@ public:
      */
     virtual std::shared_ptr<ModelCtx> load(const std::string& modelId, const std::filesystem::path& modelPath, const EngineLoadParams& params) = 0;
 
-    virtual int numLoadedModels();
+    virtual int numLoadedModels() const noexcept = 0;
 
 };
 

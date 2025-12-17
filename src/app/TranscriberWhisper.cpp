@@ -6,7 +6,7 @@
 #include <string_view>
 
 #include "TranscriberWhisper.h"
-
+#include "ScopedTimer.h"
 #include "logging.h"
 
 namespace logfault {
@@ -20,32 +20,6 @@ using namespace std;
 
 
 namespace {
-
-void whisperLogger(ggml_log_level level, const char *msg, void *) {
-    string_view message(msg);
-    message = message.substr(0, message.empty() ? 0 : message.size() -1);
-
-    switch(level) {
-        case GGML_LOG_LEVEL_ERROR:
-            LOG_ERROR << "[whisper] " << message;
-            break;
-        case GGML_LOG_LEVEL_WARN:
-            LOG_WARN << "[whisper] " << message;
-            break;
-        case GGML_LOG_LEVEL_INFO:
-            LOG_INFO << "[whisper] " << message;
-            break;
-        case GGML_LOG_LEVEL_DEBUG:
-            LOG_DEBUG << "[whisper] " << message;
-            break;
-        case GGML_LOG_LEVEL_CONT:
-            LOG_TRACE << "[whisper] " << message;
-            break;
-        case GGML_LOG_LEVEL_NONE:
-            // no logging
-            break;
-    }
-}
 
 
 constexpr float MERGE_EPS_MS = 50.0F; // tune between ~20–100 ms
@@ -119,33 +93,24 @@ TranscriberWhisper::TranscriberWhisper(std::string name, std::unique_ptr<Config>
 TranscriberWhisper::~TranscriberWhisper()
 {
     LOG_DEBUG_EX(*this) << "TranscriberWhisper: destructor called";
-    whisper_state_.reset();
-    w_ctx_ = {};
 }
 
 bool TranscriberWhisper::createContextImpl()
 {
-    assert(w_ctx_ == nullptr);
+    LOG_DEBUG_EX(*this) << "Creating a context/session for a loaded Whisper model";
+    assert(session_ctx_ == nullptr);
     assert(haveModel());
 
-    auto * wi = dynamic_cast<WhisperInstance *>(modelInstance().get());
-    if (!wi) {
-        LOG_ERROR_EX(*this) << "TranscriberWhisper::createContextImpl: model instance is not WhisperInstance";
-        return false;
+    auto model_instance = modelInstance();
+    if (!model_instance) {
+        return failed("Model instance is null in createContextImpl");
     }
 
-    w_ctx_ = wi->whisperCtx();
-    assert(w_ctx_);
-    if (!w_ctx_) {
-        LOG_ERROR_EX(*this) << "Failed to get whisper context from model instance";
-        return false;
-    }
+    auto whisper_ctx = model_instance->modelCtx();
 
-    whisper_state_ = wi->newState();
-    assert(whisper_state_);
-    if (!whisper_state_) {
-        LOG_ERROR_EX(*this) << "Failed to create new whisper state";
-        return false;
+    session_ctx_ = whisper_ctx->createWhisperSession();
+    if (!session_ctx_) {
+        return failed("Failed to create Whisper session context in createContextImpl");
     }
 
     return true;
@@ -154,13 +119,11 @@ bool TranscriberWhisper::createContextImpl()
 void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastChunk)
 {
     if (isCancelled()) {
-        LOG_WARN_EX(*this) << "Callen when cancelled. Ignoring.";
+        LOG_WARN_EX(*this) << "Called when cancelled. Ignoring.";
         return;
     }
 
-    assert(w_ctx_ != nullptr);
-    if (!w_ctx_)
-        return;
+    assert(session_ctx_ != nullptr);
 
     LOG_TRACE_EX(*this) << "TranscriberWhisper::processChunk #" << ++chunks_ << " called with data size ="
                 << data.size() << " lastChunk =" << lastChunk;
@@ -254,11 +217,11 @@ void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastCh
 
     // --- 4) Prepare Whisper parameters -----------------------------------
 
-    auto params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+    qvw::WhisperSessionCtx::WhisperFullParams params;
 
     // Threads
     const unsigned hwThreads = std::max(1u, std::thread::hardware_concurrency());
-    params.n_threads = std::min<unsigned>(hwThreads, 48u);  // tune as needed
+    //params.threads = std::min<unsigned>(hwThreads, 48u);  // tune as needed
 
     params.print_progress   = false;
     params.print_realtime   = false;
@@ -277,42 +240,29 @@ void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastCh
         params.token_timestamps = true;
     }
 
-    params.encoder_begin_callback_user_data = this;
-    params.encoder_begin_callback = [](struct whisper_context * ctx, struct whisper_state * state, void * user_data) -> bool {
-        auto * self = reinterpret_cast<TranscriberWhisper *>(user_data);
-        LOG_TRACE_EX(*self) << "Whisper encoder begin callback called in state " << self->state();
-        return self->isCancelled() == false;
-    };
 
     // --- 5) Run Whisper on the current sliding buffer --------------------
 
     LOG_TRACE_EX(*this) << "Calling whisper_full() with "
                  << pcm_fill_ << " samples ("
-                 << (pcm_fill_ * 1000 / sample_rate_) << " ms), "
-                 << "offset_ms=" << params.offset_ms;
-    const auto when = std::chrono::steady_clock::now();
-    const int rc = whisper_full_with_state(
-        w_ctx_,
-        whisper_state_.get(),
-        params,
-        pcm_.data(),
-        pcm_fill_
-        );
+                 << (pcm_fill_ * 1000 / sample_rate_) << " ms), "                 << "offset_ms=" << (params.offset_ms.has_value() ? to_string(params.offset_ms.value()) : "[empty]"s);;
+
+    const auto pcm_window = std::span<const float>(pcm_.data(), pcm_fill_);
+    qvw::WhisperSessionCtx::Transcript transcript_out;
+    ScopedTimer timer;
+    const auto ok = session_ctx_->whisperFull(pcm_window, params, transcript_out);
+    LOG_DEBUG_EX(*this) << "whisper_full() returned ok =" << ok
+                        << " in " << timer.elapsed() << " seconds.";
 
     if (isCancelled()) {
         LOG_DEBUG_EX(*this) << "Cancelled during whisper_full() call. Aborting furtner processing.";
         return;
     }
 
-    const auto duration = std::chrono::steady_clock::now() - when;
-    LOG_DEBUG_EX(*this) << "whisper_full() returned rc =" << rc
-                << " in " << std::chrono::duration_cast<std::chrono::milliseconds>(duration).count()
-                << " ms";
-
     last_processed_sample_ = total_samples_;
 
-    if (rc != 0) {
-        // Optional: log via your logger
+    if (!ok) {
+        LOG_ERROR_N << "whisper_full() failed";
         return;
     }
 
@@ -322,29 +272,14 @@ void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastCh
     const float global_start_ms =
         (global_start_samples * 1000.0F) / sample_rate_;
 
-    const int n_segments = whisper_full_n_segments_from_state(whisper_state_.get());
 
-    for (int i = 0; i < n_segments; ++i) {
-        const float local_start_ms = whisper_full_get_segment_t0_from_state(whisper_state_.get(), i);
-        const float local_end_ms   = whisper_full_get_segment_t1_from_state(whisper_state_.get(), i);
-
-        const float start_ms = global_start_ms + local_start_ms;
-        const float end_ms   = global_start_ms + local_end_ms;
-
-        const char *text_c = whisper_full_get_segment_text_from_state(whisper_state_.get(), i);
-        if (!text_c || !*text_c)
-            continue;
-
+    for(const auto segment: transcript_out.segments){
         TranscriptSegment seg;
-        seg.start_ms = start_ms;
-        seg.end_ms   = end_ms;
-        seg.text     = QString::fromUtf8(text_c);
-
+        seg.start_ms = global_start_ms + static_cast<float>(segment.t0_ms);
+        seg.end_ms   = global_start_ms + static_cast<float>(segment.t1_ms);
+        seg.text     = QString::fromUtf8(segment.text.c_str());
         insertOrReplaceSegment(segments_, seg);
     }
-
-
-    // Still inside processChunk, after updating segments_:
 
     const QString full_text = assembleTranscript(segments_);
     LOG_DEBUG_EX(*this) << "Emitting partial text:" << full_text;
@@ -357,24 +292,19 @@ void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastCh
     }
 }
 
-void TranscriberWhisper::processRecording(std::span<const float> data)
+bool TranscriberWhisper::processRecording(std::span<const float> data)
 {
     LOG_DEBUG_EX(*this) << name() << ": Called with data size ="
                 << data.size();
 
-    assert(w_ctx_);
-    if (!w_ctx_) {
-        throw std::runtime_error("TranscriberWhisper::processRecording ctx_ is not initialized");
-    }
+    assert(session_ctx_ != nullptr);
 
     final_text_.clear();
 
-    auto params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+    qvw::WhisperSessionCtx::WhisperFullParams params;
 
     // Threads
     const unsigned hwThreads = std::max(1u, std::thread::hardware_concurrency());
-    params.n_threads = std::min<unsigned>(hwThreads, 48u);  // tune as needed
-
     params.print_progress   = false;
     params.print_realtime   = false;
     params.print_timestamps = true;
@@ -389,33 +319,29 @@ void TranscriberWhisper::processRecording(std::span<const float> data)
     params.token_timestamps = true;
 
     LOG_DEBUG_EX(*this) << "Calling whisper_full() with " << data.size() << " samples.";
-    const auto when = std::chrono::steady_clock::now();
-    const int rc = whisper_full_with_state(w_ctx_, whisper_state_.get(), params, data.data(), data.size());
+    qvw::WhisperSessionCtx::Transcript transcript_out;
+    ScopedTimer timer;
+    const auto ok = session_ctx_->whisperFull(data, params, transcript_out);
+    LOG_DEBUG_EX(*this) << "whisper_full() returned ok =" << ok
+                        << " in " << timer.elapsed() << " seconds.";
 
-    const auto duration = std::chrono::steady_clock::now() - when;
-    LOG_DEBUG_EX(*this) << "whisper_full() returned rc =" << rc
-                << " in " << std::chrono::duration_cast<std::chrono::milliseconds>(duration).count()
-                << " ms";
-
-    if (rc != 0) {
-        throw std::runtime_error("TranscriberWhisper::processRecording whisper_full() failed");
+    if (!ok) {
+        LOG_ERROR_N << "whisper_full() failed.";
+        return false;
     }
 
     // Get all the returned test into final_text_
-    const int segments_count = whisper_full_n_segments_from_state(whisper_state_.get());
     final_text_.clear();
-    for (int i = 0; i < segments_count; ++i) {
-        const char *text_c = whisper_full_get_segment_text_from_state(whisper_state_.get(), i);
-        if (!text_c || !*text_c)
-            continue;
-
-        final_text_ += QString::fromUtf8(text_c);
+    for(const auto segment: transcript_out.segments){
+        final_text_ += QString::fromUtf8(segment.text.c_str());
     }
 
     if (config().submit_filal_text) {
         LOG_TRACE_EX(*this) << "Emitting final text:" << final_text_;
         emit Model::finalTextAvailable(final_text_);
     }
+
+    return true;
 }
 
 bool TranscriberWhisper::stopImpl()

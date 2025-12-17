@@ -76,7 +76,7 @@ public:
     bool isBusy()     const;
 
 signals:
-    void recordingStateChanged(RecordingState newState);
+    void recordingStateChanged(AppEngine::RecordingState newState);
     void languageIndexChanged(int newIndex);
     void modelIndexChanged(int newIndex);
     void postModelIndexChanged(int newIndex);

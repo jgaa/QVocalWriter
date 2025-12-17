@@ -6,10 +6,10 @@
 #include <QNetworkAccessManager>
 #include <QStandardPaths>
 
-
+#include "qvw/WhisperEngine.h"
 #include "Transcriber.h"
 
-#include "WhisperInstance.h"
+//#include "WhisperInstance.h"
 
 struct TranscriptSegment {
     float   start_ms = 0.0f;
@@ -36,7 +36,7 @@ public:
 protected:
     bool createContextImpl() override;
     void processChunk(std::span<const uint8_t> data, bool lastChunk) override;
-    void processRecording(std::span<const float> data) override;
+    bool processRecording(std::span<const float> data) override;
     bool stopImpl() override;
 
 private:
@@ -46,8 +46,11 @@ private:
     void startSession();
 
 private:
-    whisper_context *w_ctx_{};
-    std::shared_ptr<whisper_state> whisper_state_;
+    //whisper_context *w_ctx_{};
+    //std::shared_ptr<whisper_state> whisper_state_;
+
+    std::shared_ptr<qvw::WhisperSessionCtx> session_ctx_;
+
     size_t chunks_ = 0;
 
     // Audio parameters

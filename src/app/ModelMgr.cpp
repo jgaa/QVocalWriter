@@ -1,5 +1,4 @@
 #include <filesystem>
-#include <WhisperInstance.h>
 #include <QStandardPaths>
 #include <QNetworkRequest>
 #include <QSaveFile>
@@ -15,7 +14,8 @@
 #include <qcoronetworkreply.h>
 #include <qcoroiodevice.h>
 
-
+#include "qvw/WhisperEngine.h"
+#include "ModelMgr.h"
 #include "ScopedTimer.h"
 #include "logging.h"
 
@@ -178,6 +178,20 @@ std::optional<ModelInfo> ModelMgr::findBestModel(ModelKind kind, const QString &
         }
     }
     return rval;
+}
+
+qvw::WhisperEngine &ModelMgr::whisperEngine() {
+
+    if (!whisper_engine_) {
+        whisper_engine_ = qvw::WhisperEngine::create({});
+        if (!whisper_engine_) {
+            LOG_ERROR_N << "Failed to create Whisper engine instance.";
+            throw std::runtime_error{"Failed to create Whisper engine instance."};
+        }
+    }
+
+    assert(whisper_engine_);
+    return *whisper_engine_;
 }
 
 QCoro::Task<bool> ModelMgr::makeAvailable(ModelKind kind, const ModelInfo &modelInfo) noexcept
@@ -409,18 +423,7 @@ QCoro::Task<ModelMgr::model_ctx_t> ModelMgr::getInstance(ModelKind kind, const Q
 
     if (auto best_model = findBestModel(kind, modelId)) {
         const auto path = findModelPath(kind, *best_model);
-        std::shared_ptr<ModelInstance> instance;
-        switch (kind) {
-            case ModelKind::WHISPER:
-                instance = std::make_shared<WhisperInstance>(*best_model, QString::fromUtf8(path.string()));
-                break;
-            case ModelKind::GENERAL:
-                LOG_ERROR_N << "General model kind not implemented yet.";
-                assert(false);
-                co_return nullptr;
-            default:
-                assert(false); // should not happen
-        }
+        auto instance = std::make_shared<ModelInstance>(kind, *best_model, QString::fromUtf8(path.string()));
 
         if (!co_await makeAvailable(kind, instance->modelInfo())) {
             LOG_ERROR_N << "Failed to make model available: id='" << modelId << "'";
@@ -446,7 +449,7 @@ QCoro::Task<bool> ModelInstance::load() noexcept
         auto ok = co_await  QtConcurrent::run([this]() -> bool {
             LOG_DEBUG_N << "Loading model instance: " << modelId();
             ScopedTimer timer;
-            const auto ok =  loadImpl();
+            const auto ok =  load(kind());
             LOG_DEBUG_N << "Model instance loaded in "
                          << timer.elapsed() << " seconds: "
                          << modelId()
@@ -461,15 +464,13 @@ QCoro::Task<bool> ModelInstance::load() noexcept
 
 QCoro::Task<bool> ModelInstance::unload() noexcept
 {
+    LOG_TRACE_N << "Unloading model instance: " << modelId()
+                << ". current load count=" << loaded_count_;
+
     assert(loaded_count_ > 0);
     if (--loaded_count_ ==0) {
         co_return co_await  QtConcurrent::run([this]() -> bool {
-            LOG_DEBUG_N << "Unloading model instance: " << modelId();
-            ScopedTimer timer;
-            return unloadImpl();
-            LOG_DEBUG_N << "Model instance unloaded in "
-                         << timer.elapsed() << " seconds: "
-                         << modelId();
+            return unloadNow();
         });
     }
 
@@ -478,10 +479,50 @@ QCoro::Task<bool> ModelInstance::unload() noexcept
 
 bool ModelInstance::unloadNow() noexcept
 {
-    assert(loaded_count_ > 0);
-    if (loaded_count_ > 0) {
+    LOG_DEBUG_N << "Unloading model instance: " << modelId();
+
+    ScopedTimer timer;
+    try {
+        model_ctx_.reset();
         loaded_count_ = 0;
-        return unloadImpl();
+    } catch (const std::exception &e) {
+        LOG_ERROR_N << "Exception during model context reset: " << e.what();
+        return false;
     }
+
+    LOG_DEBUG_N << "Model instance unloaded in "
+                << timer.elapsed() << " seconds: "
+                << modelId();
+    return true;
+}
+
+bool ModelInstance::load(ModelKind kind)
+{
+    switch (kind) {
+    case ModelKind::WHISPER: {
+        return loadWhisper();
+    }
+    default:
+        LOG_ERROR_N << "Unknown model kind requested for loading.";
+        return false;
+    }
+}
+
+bool ModelInstance::loadWhisper()
+{
+
+    auto& wengine = ModelMgr::instance().whisperEngine();
+    const filesystem::path path = full_path_.toStdString();
+    qvw::WhisperEngineLoadParams params;
+    ScopedTimer timer;
+    LOG_DEBUG_N << "Loading Whisper model \"" << modelId() << "\" from path: " << full_path_;
+    model_ctx_ = wengine.loadWhisper(modelId().toStdString(), path, params);
+    if (!model_ctx_) {
+        LOG_ERROR_N << "Failed to load Whisper model from path: " << full_path_;
+        return false;
+    }
+    LOG_INFO_N << "Whisper model \"" << modelId() << "\" loaded in "
+                << timer.elapsed() << " seconds from path: " << full_path_;
+    emit modelReady();
     return true;
 }

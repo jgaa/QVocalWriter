@@ -31,7 +31,7 @@ optional<logfault::LogLevel> toLogLevel(string_view name) {
 } // namespace
 
 int main(int argc, char *argv[])
-{
+{   
     QGuiApplication app(argc, argv);
 
     // Set application information
@@ -56,7 +56,6 @@ int main(int argc, char *argv[])
     AppEngine app_engine;
 
     QQmlApplicationEngine qml_engine;
-
     qml_engine.rootContext()->setContextProperty("appEngine", &app_engine);
 
     QObject::connect(

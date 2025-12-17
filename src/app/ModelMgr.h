@@ -27,15 +27,21 @@ enum class ModelKind {
     GENERAL
 };
 
+namespace qvw {
+class WhisperEngine;
+}
+
 
 // Instance of a model
 class ModelInstance : public QObject{
     Q_OBJECT
 public:
-    ModelInstance(const ModelInfo& modelInfo, QString fullPath, QObject *parent = nullptr)
-        : QObject(parent), full_path_{fullPath}, model_info_{modelInfo} {}
+    ModelInstance(ModelKind kind, const ModelInfo& modelInfo, QString fullPath, QObject *parent = nullptr)
+        : QObject(parent), kind_{kind}, full_path_{fullPath}, model_info_{modelInfo} {}
 
-    virtual ModelKind kind() const noexcept = 0;
+    ModelKind kind() const noexcept {
+        return kind_;
+    }
 
     bool isLoaded() const noexcept {
         return loaded_count_ > 0;
@@ -57,18 +63,27 @@ public:
         return full_path_;
     }
 
+    std::shared_ptr<qvw::ModelCtx> modelCtx() noexcept {
+        assert(model_ctx_);
+        return model_ctx_;
+    }
+
 signals:
     void partialTextAvailable(const QString &text);
     void finalTextAvailable(const QString &text);
     void modelReady();
 
-// protected:
+ protected:
+    bool load(ModelKind kind);
+    bool loadWhisper();
+
 //     virtual bool loadImpl() noexcept = 0;
 //     virtual bool unloadImpl() noexcept = 0;
 //     virtual void *ctx() = 0 ;
 //     virtual bool haveCtx() const noexcept = 0 ;
 
 private:
+    const ModelKind kind_;
     QString full_path_;
     int loaded_count_{};
     ModelInfo model_info_;
@@ -142,6 +157,8 @@ public:
     models_t loadedModels(ModelKind kind) const noexcept;
     std::optional<ModelInfo> findBestModel(ModelKind kind, const QString& modelName) const noexcept;
 
+    qvw::WhisperEngine& whisperEngine();
+
 signals:
     void downloadProgress(QString name, qint64 bytesReceived, qint64 bytesTotal);
     void modelReady(const QString& modelId);
@@ -164,6 +181,7 @@ private:
 
     QNetworkAccessManager *nam_{};
     std::array<instances_map_t, 2 /* Kind */> instances_;
+    std::shared_ptr<qvw::WhisperEngine> whisper_engine_;
     static ModelMgr *self_;
 };
 

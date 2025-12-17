@@ -36,7 +36,7 @@ public:
 
 protected:
     virtual void processChunk(std::span<const uint8_t> data, bool lastChunk = false) = 0;
-    virtual void processRecording(std::span<const float> data) = 0;
+    virtual bool processRecording(std::span<const float> data) = 0;
 
 private:
     bool transcribeSegments();
