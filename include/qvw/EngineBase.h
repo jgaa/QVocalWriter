@@ -14,6 +14,7 @@ namespace qvw {
 
 class EngineBase;
 class WhisperSessionCtx;
+class LlamaSessionCtx;
 
 /*! Parameters for loading the model.
  *
@@ -67,13 +68,19 @@ public:
 
     virtual const std::string& modelId() const noexcept = 0;
 
-    /*! Creates a new session context for operations with this model.
+    /*! Creates a new Whisper session context for processing.
      *
-     * Specific engines will implement this method.
+     * Only applicable for Whisper models.
      *
-     * @return Shared pointer to the new session context, or nullptr on failure.
+     * @return Shared pointer to the newly created session context.
      */
-    virtual std::shared_ptr<WhisperSessionCtx> createWhisperSession() = 0;
+    virtual std::shared_ptr<WhisperSessionCtx> createWhisperSession() {
+        return {};
+    };
+
+    virtual std::shared_ptr<LlamaSessionCtx> createLlamaSession() {
+        return {};
+    }
 };
 
 

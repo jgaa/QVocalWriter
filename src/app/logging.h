@@ -9,11 +9,13 @@
 class Model;
 class Transcriber;
 class TranscriberWhisper;
+class GeneralModel;
 
 namespace logfault {
 std::pair<bool /* json */, std::string /* content or json */> toLog(const Model& m, bool json);
 std::pair<bool /* json */, std::string /* content or json */> toLog(const Transcriber& m, bool json);
 std::pair<bool /* json */, std::string /* content or json */> toLog(const TranscriberWhisper& m, bool json);
+std::pair<bool /* json */, std::string /* content or json */> toLog(const GeneralModel& m, bool json);
 }
 
 #include "logfault/logfault.h"

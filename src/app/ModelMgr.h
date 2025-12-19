@@ -154,8 +154,11 @@ public:
     QCoro::Task<model_ctx_t> getInstance(ModelKind kind, const QString& modelId) noexcept;
 
     model_list_t availableModels(ModelKind kind) const noexcept;
+    models_t availableModels(ModelKind kind, ModelInfo::Capability purpose) const noexcept;
     models_t loadedModels(ModelKind kind) const noexcept;
-    std::optional<ModelInfo> findBestModel(ModelKind kind, const QString& modelName) const noexcept;
+
+    std::optional<ModelInfo> findModelById(ModelKind kind, const QString& modelName) const noexcept;
+    std::optional<ModelInfo> findModelByName(ModelKind kind, const QString& name) const noexcept;
 
     qvw::WhisperEngine& whisperEngine();
 

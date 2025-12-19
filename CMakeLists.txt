@@ -75,10 +75,11 @@ FetchContent_MakeAvailable(logfault_src qcoro)
 
 # ---------- Externally built libraries begin
 
-
 include(ExternalProject)
 
 set(QVW_DEPS_PREFIX "${CMAKE_BINARY_DIR}/_deps_install")
+
+########### Whisper
 
 ExternalProject_Add(qvw_whisper_wrap_ep
   SOURCE_DIR  "${CMAKE_SOURCE_DIR}/wrappers/whisper"
@@ -107,13 +108,33 @@ set_target_properties(qvw::whisper_wrap PROPERTIES
 
 add_dependencies(qvw::whisper_wrap qvw_whisper_wrap_ep)
 
-# Link from your app
-# target_link_libraries(QVocalWriter PRIVATE qvw::whisper_wrap)
+############### Llama
 
-# Ensure runtime loader can find it when running from build tree
-# if(UNIX AND NOT APPLE)
-#   set_property(TARGET QVocalWriter PROPERTY BUILD_RPATH "${QVW_DEPS_PREFIX}/lib")
-# endif()
+set(QVW_DEPS_PREFIX "${CMAKE_BINARY_DIR}/_deps_install")
+
+ExternalProject_Add(qvw_llama_wrap_ep
+  SOURCE_DIR  "${CMAKE_SOURCE_DIR}/wrappers/llama"
+
+  CMAKE_ARGS
+    -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}
+    -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=${QVW_DEPS_PREFIX}/lib
+    -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=<BINARY_DIR>/private-archives
+
+  BUILD_COMMAND
+    ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG>
+
+  INSTALL_COMMAND ""
+
+  BUILD_BYPRODUCTS
+    ${QVW_DEPS_PREFIX}/lib/libqvw_llama_wrap.so
+)
+
+add_library(qvw::llama_wrap SHARED IMPORTED GLOBAL)
+set_target_properties(qvw::llama_wrap PROPERTIES
+  IMPORTED_LOCATION "${QVW_DEPS_PREFIX}/lib/libqvw_llama_wrap.so"
+)
+
+add_dependencies(qvw::llama_wrap qvw_llama_wrap_ep)
 
 
 # ---------- Externally built libraries end
@@ -144,6 +165,7 @@ qt_add_qml_module(${PROJECT_NAME}
       SOURCES
           include/qvw/EngineBase.h
           include/qvw/WhisperEngine.h
+          include/qvw/LlamaEngine.h
           include/qvw/log_wrapper.h
           src/app/AppEngine.cpp
           src/app/AppEngine.h
@@ -168,6 +190,8 @@ qt_add_qml_module(${PROJECT_NAME}
           src/app/Transcriber.h
           src/app/TranscriberWhisper.cpp
           src/app/TranscriberWhisper.h
+          SOURCES src/app/GeneralModel.h src/app/GeneralModel.cpp
+          QML_FILES qml/ChatPane.qml
 )
 
 # Add includepaths
@@ -188,9 +212,7 @@ target_link_libraries(${PROJECT_NAME}
         Qt6::Qml
         Qt6::Multimedia
         logfault::logfault
-        #whisper_cpp::whisper_cpp
-        # whisper
-        # llama
+        qvw::llama_wrap
         qvw::whisper_wrap
         QCoro6::Core
         QCoro6::Network

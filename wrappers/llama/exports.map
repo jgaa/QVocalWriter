@@ -1,0 +1,10 @@
+{
+  global:
+    _ZN3qvw*;      # qvw:: functions/classes
+    _ZTI3qvw*;     # typeinfo for qvw::...
+    _ZTV3qvw*;     # vtable for qvw::...
+    _ZTS3qvw*;     # typeinfo name for qvw::...
+    qvw_*;         # C ABI helpers
+  local:
+    *;
+};

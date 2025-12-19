@@ -13,18 +13,24 @@ class AudioFileWriter;
 class Transcriber;         // base class
 class TranscriberWhisper;  // concrete class
 class ModelMgr;
+class GeneralModel;
 
 class AppEngine : public QObject
 {
     Q_OBJECT
     QML_ELEMENT
 
-    Q_PROPERTY(RecordingState recordingState READ recordingState NOTIFY recordingStateChanged)
-    Q_PROPERTY(QStringList languages READ languages CONSTANT)
-    Q_PROPERTY(QStringList modelSizes READ modelSizes CONSTANT)
+    Q_PROPERTY(State state READ state NOTIFY stateChanged)
+    Q_PROPERTY(QStringList languages READ languages NOTIFY languagesChanged)
+    Q_PROPERTY(QStringList transcribeModels READ transcribeModels NOTIFY languageIndexChanged)
+    Q_PROPERTY(QStringList translateModels READ translateModels CONSTANT)
+    Q_PROPERTY(QStringList documentModels READ documentModels CONSTANT)
+    Q_PROPERTY(QStringList chatModels READ chatModels CONSTANT)
+
     Q_PROPERTY(int languageIndex READ languageIndex WRITE setLanguageIndex NOTIFY languageIndexChanged)
-    Q_PROPERTY(int modelIndex READ modelIndex WRITE setModelIndex NOTIFY modelIndexChanged)
-    Q_PROPERTY(int postModelIndex READ postModelIndex WRITE setPostModelIndex NOTIFY postModelIndexChanged)
+    Q_PROPERTY(QString transcribeModelName READ transcribeModelName() WRITE setTranscribeModelName NOTIFY transcribeModelNameChanged)
+    Q_PROPERTY(QString transcribePostModelName READ transcribePostModelName() WRITE setTranscribePostModelName NOTIFY postTranscribeModelNameChanged)
+    Q_PROPERTY(QString chatModelName READ chatModelName() WRITE setChatModelName NOTIFY chatModelNameChanged)
     Q_PROPERTY(bool canPrepare READ canPrepare NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canStart READ canStart NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canStop READ canStop NOTIFY stateFlagsChanged)
@@ -36,7 +42,7 @@ class AppEngine : public QObject
     Q_PROPERTY(const QString& stateText MEMBER state_text_ NOTIFY stateTextChanged)
 
 public:
-    enum RecordingState {
+    enum class State {
         Idle,
         Preparing,
         Ready,
@@ -46,14 +52,21 @@ public:
         Resetting,
         Error
     };
-    Q_ENUM(RecordingState)
+    Q_ENUM(State)
 
-    Q_INVOKABLE void setModelIndex(int index);
-    Q_INVOKABLE void setPostModelIndex(int index);
+    struct Language {
+        QString name; // "English"
+        std::string_view whisper_language; // "en"
+    };
+
+    // Q_INVOKABLE void setModelName(const QString& name);
+    // Q_INVOKABLE void setPostModelName(const QString& name);
     Q_INVOKABLE void setLanguageIndex(int index);
     Q_INVOKABLE void startRecording();
     Q_INVOKABLE void stopRecording();
     Q_INVOKABLE void prepareForRecording();
+    Q_INVOKABLE void prepareForChat();
+    Q_INVOKABLE void chatPrompt(const QString& prompt);
     Q_INVOKABLE void saveTranscriptToFile(const QUrl &path);
     Q_INVOKABLE void reset();
 
@@ -61,27 +74,46 @@ public:
 
     AudioController &audioController() { return audio_controller_; }
     QStringList languages()   const { return languages_; }
-    QStringList modelSizes()  const { return model_sizes_; }
+    QStringList transcribeModels()  const;
     QStringList microphones() const;
     int currentMic() const;
     void setCurrentMic(int index);
 
+    QStringList translateModels() const;
+    QStringList documentModels() const;
+    QStringList chatModels() const;
+
     int  languageIndex() const { return language_index_; }
-    int  modelIndex()    const { return model_index_;    }
-    int  postModelIndex()const { return post_model_index_;}
+    QString transcribeModelName() const { return transcribe_model_name_;}
+    void setTranscribeModelName(const QString& name);
+    void setTranscribePostModelName(const QString& name);
+    QString transcribePostModelName() const { return transcribe_post_model_name_;}
+
+    int modelIndex(const QString& name) const;
 
     bool canPrepare() const;
     bool canStart()   const;
     bool canStop()    const;
     bool isBusy()     const;
 
+    template <typename T>
+    constexpr bool stateIn(std::initializer_list<T> list) const noexcept
+    {
+        const auto s = state();
+        for (auto v : list)
+            if (v == s)
+                return true;
+        return false;
+    }
+
 signals:
-    void recordingStateChanged(AppEngine::RecordingState newState);
+    void stateChanged(AppEngine::State newState);
     void languageIndexChanged(int newIndex);
-    void modelIndexChanged(int newIndex);
-    void postModelIndexChanged(int newIndex);
+    void transcribeModelNameChanged();
+    void postTranscribeModelNameChanged();
     void stateFlagsChanged();
     void partialTextAvailable(const QString &text);
+    void finalTextAvailable(const QString &text);
     void errorOccurred(const QString &message);
     void downloadProgress(QString name, qint64 bytesReceived, qint64 bytesTotal);
     void recordingLevelChanged();
@@ -89,32 +121,39 @@ signals:
     void microphonesChanged();
     void currentMicChanged();
     void stateTextChanged();
+    void languagesChanged();
 
 private:
-    RecordingState recordingState() const { return recording_state_; }
-    void setRecordingState(RecordingState newState);
+    State state() const { return state_; }
+    void setState(State newState);
     void createPipelineIfNeeded();
     QCoro::Task<void> startPrepareForRecording();
+    QCoro::Task<void> startPrepareForChat(QString modelName);
     QCoro::Task<bool> prepareTranscriberModels();
-    QCoro::Task<std::shared_ptr<Transcriber>> prepareModel(std::string name,
+    QCoro::Task<std::shared_ptr<Transcriber>> prepareTranscriber(std::string name,
                                                            std::string_view modelId,
                                                            std::string_view language,
                                                            bool loadModel,
                                                            bool submitFilalText);
+
+    QCoro::Task<std::shared_ptr<GeneralModel>> prepareGeneralModel(std::string name,
+                                                                 std::string_view modelId,
+                                                                 bool loadModel);
     void onFinalRecordingTextAvailable(const QString &text);
     QCoro::Task<void> transcribeChunks();
     QCoro::Task<void> onRecordingDone();
     bool failed(const QString& why);
     QCoro::Task<void> doReset();
     void setStateText(QString text = {});
+    void prepareLanguages();
 
     AudioController audio_controller_;
-    RecordingState recording_state_ = Idle;
+    State state_{State::Idle};
     QStringList languages_;
-    QStringList model_sizes_;
+    QStringList transcribe_model_sizes_;
     int language_index_{0}; // Auto
-    int model_index_{};
-    int post_model_index_{};
+    QString transcribe_model_name_{};
+    QString transcribe_post_model_name_{};
     QString pcm_file_path_;
     std::shared_ptr<chunk_queue_t> chunk_queue_;
     std::shared_ptr<AudioRecorder> recorder_;
@@ -122,9 +161,11 @@ private:
     std::shared_ptr<Transcriber> rec_transcriber_;
     std::shared_ptr<Transcriber> post_transcriber_;
     std::shared_ptr<ModelMgr> model_mgr_;
+    std::shared_ptr<GeneralModel> chat_model_;
     qreal recording_level_{};
     QString current_recorded_text_;
     QString state_text_;
+    QList<Language> languageList_;
 };
 
-std::ostream& operator << (std::ostream& os, AppEngine::RecordingState state);
+std::ostream& operator << (std::ostream& os, AppEngine::State state);

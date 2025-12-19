@@ -1,18 +1,21 @@
 
 #include <array>
 #include <format>
+#include <ranges>
 
 #include <QStringLiteral>
 #include <QDir>
 #include <QStandardPaths>
 #include <QSettings>
 #include <QTimer>
+#include <QCollator>
 
 #include "AppEngine.h"
 #include "AudioRecorder.h"
 #include "AudioFileWriter.h"
 #include "TranscriberWhisper.h"
 #include "AudioCaptureDevice.h"
+#include "GeneralModel.h"
 
 #include "logging.h"
 
@@ -20,50 +23,27 @@ using namespace std;
 
 namespace {
 
-struct Language {
-    string_view name;
-    string_view whisper_language;
-};
+// string getTranscriberModelId(const ModelDef &model, const Language &language)
+// {
+//     if (model.has_lng_postfix && language.whisper_language == "en") {
+//         return format("{}.en", model.whisper_size);
+//     }
 
-constexpr array<Language, 8> language_table = {
-    Language{ "Auto",      ""            },
-    Language{ "Chinese",   "zh"          },
-    Language{ "English",   "en"          },
-    Language{ "French",    "fr"          },
-    Language{ "German",    "de"          },
-    Language{ "Japanese",  "ja"          },
-    Language{ "Norwegian", "no"          },
-    Language{ "Spanish",   "es"          },
-    };
+//     return string{model.whisper_size};
+// }
 
-struct ModelDef {
-    string_view name;
-    string_view whisper_size;
-    bool has_lng_postfix{ false};
-};
-
-constexpr auto model_table = to_array<ModelDef>( {
-    { "--None--",   "",   true  },
-    { "Tiny",   "tiny",   true  },
-    { "Base",   "base",   true  },
-    { "Small",  "small",  true  },
-    { "Medium", "medium", true  },
-    { "Large",  "large-v3", false },
-    { "Turbo",  "large-v3-turbo", false },
-    });
-
-string getTranscriberModelId(const ModelDef &model, const Language &language)
+template <typename T>
+constexpr bool is_one_of(T value, std::initializer_list<T> list)
 {
-    if (model.has_lng_postfix && language.whisper_language == "en") {
-        return format("{}.en", model.whisper_size);
-    }
-
-    return string{model.whisper_size};
+    for (auto v : list)
+        if (v == value)
+            return true;
+    return false;
 }
 
 } // anon ns
 
-ostream& operator << (ostream& os, AppEngine::RecordingState state) {
+ostream& operator << (ostream& os, AppEngine::State state) {
     constexpr auto states = to_array<string_view>({
         "Idle",
         "Preparing",
@@ -92,7 +72,7 @@ void AppEngine::startRecording()
     QFile::remove(pcm_file_path_);
 
     recorder_->start();
-    setRecordingState(RecordingState::Recording);
+    setState(State::Recording);
 
     if (rec_transcriber_) {
         transcribeChunks();
@@ -131,6 +111,11 @@ void AppEngine::prepareForRecording()
     startPrepareForRecording();
 }
 
+void AppEngine::prepareForChat(const QString &modelName)
+{
+    startPrepareForChat(modelName);
+}
+
 void AppEngine::saveTranscriptToFile(const QUrl &path)
 {
     QString filename = path.toLocalFile();
@@ -152,34 +137,47 @@ AppEngine::AppEngine() {
     QSettings settings{};
 
     setStateText();
+    prepareLanguages();
+    language_index_ = 0; // auto
 
-    for (const auto &lang : language_table) {
-        languages_.append(QString::fromUtf8(lang.name.data(), int(lang.name.size())));
+    model_mgr_ = make_shared<ModelMgr>();
+    assert(model_mgr_);
+
+    /*! We store the language as it's whisper code so that we can update languages in the
+     *  future without breaking user settings.
+     */
+    if (auto ln = settings.value("transcribe.language", "").toString(); !ln.isEmpty()) {
+        const string target = ln.toStdString();
+        for (int i = 0; i < languageList_.size(); ++i) {
+            if (languageList_.at(i).whisper_language == target) {
+                language_index_ = i;
+                break;
+            }
+        }
     }
 
-    for (const auto &m : model_table) {
-        model_sizes_.append(QString::fromUtf8(m.name.data(), int(m.name.size())));
+    {
+        // We store the id, not the model name (which may be localized)
+        auto lookup_name = [](const QString &stored_value) -> QString {
+            const string target = stored_value.toStdString();
+            const auto models = ModelMgr::instance().availableModels(ModelKind::WHISPER);
+            for (int i = 0; i < models.size(); ++i) {
+                if (models[(size_t(i))].id == target) {
+                    return QString::fromUtf8(models[(size_t(i))].name);
+                }
+            }
+            return {};
+        };
+
+        transcribe_model_name_ = lookup_name(settings.value("transcribe.model", "").toString()); // None
+        transcribe_post_model_name_ = lookup_name(settings.value("transcribe.post-model", "base").toString());
     }
-
-    language_index_ = settings.value("transcribe.language", 0).toInt();
-
-    int default_transcriber_model = model_index_ = distance(
-        model_table.begin(),
-        ranges::find_if(model_table,
-            [](const auto &m) { return m.whisper_size == "base"; }
-            )
-        );
-
-    model_index_ = settings.value("transcribe.model", 0).toInt(); // None
-    post_model_index_ = settings.value("transcribe.post-model", default_transcriber_model).toInt();
 
     const QString baseDir =
         QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     QDir().mkpath(baseDir);
     pcm_file_path_ = baseDir + QLatin1String("/recording.pcm");
 
-    model_mgr_ = make_shared<ModelMgr>();
-    assert(model_mgr_);
 
     connect(
         model_mgr_.get(),
@@ -225,68 +223,137 @@ void AppEngine::setCurrentMic(int index)
     audio_controller_.setInputDevice(index);
 }
 
+QStringList AppEngine::transcribeModels() const
+{
+    QStringList models;
+    auto all = ModelMgr::instance().availableModels(ModelKind::WHISPER, ModelInfo::Capability::Transcribe);
+    for (const auto &m : all) {
+        if (language_index_ != 1) { // en
+            // ignore models ending in -en
+            if (QString::fromUtf8(m.name).endsWith("-en")) {
+                continue;
+            }
+        }
+        models.append(QString::fromUtf8(m.name));
+    }
+    return models;
+}
+
+QStringList AppEngine::translateModels() const
+{
+    QStringList models;
+    auto all = ModelMgr::instance().availableModels(ModelKind::GENERAL, ModelInfo::Capability::Translate);
+    for (const auto &m : all) {
+        models.append(QString::fromUtf8(m.name));
+    }
+    return models;
+}
+
+QStringList AppEngine::documentModels() const
+{
+    QStringList models;
+    auto all = ModelMgr::instance().availableModels(ModelKind::GENERAL, ModelInfo::Capability::Rewrite);
+    for (const auto &m : all) {
+        models.append(QString::fromUtf8(m.name));
+    }
+    return models;
+}
+
+QStringList AppEngine::chatModels() const
+{
+    QStringList models;
+    auto all = ModelMgr::instance().availableModels(ModelKind::GENERAL, ModelInfo::Capability::Chat);
+    for (const auto &m : all) {
+        models.append(QString::fromUtf8(m.name));
+    }
+    return models;
+}
+
+int AppEngine::modelIndex(const QString &name) const
+{
+    static QStringList model_list = transcribeModels();
+    static auto language_id = language_index_;
+
+    if (name.startsWith('[')) {
+        return -1; // empty
+    }
+
+    if (language_id != language_index_) {
+        language_id = language_index_;
+        model_list = transcribeModels();
+    }
+
+    for (int i = 0; i < model_list.size(); ++i) {
+        if (model_list.at(i) == name) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 bool AppEngine::canPrepare() const
 {
-    const bool have_selecion = language_index_ >= 0 && (model_index_ >= 1 || post_model_index_ >= 1);
-    return recording_state_ == RecordingState::Idle && have_selecion;
+    const auto model_index = modelIndex(transcribe_model_name_);
+    const auto post_model_index = modelIndex(transcribe_post_model_name_);
+    const bool have_selecion = language_index_ >= 0 && (post_model_index >= 0 || post_model_index >= 0);
+    return state() == State::Idle && have_selecion;
 }
 
 bool AppEngine::canStart() const
 {
-    return recording_state_ == RecordingState::Ready;
+    return state_ == State::Ready;
 }
 
 bool AppEngine::canStop() const
 {
-    return recording_state_ == RecordingState::Recording
-           || recording_state_ == RecordingState::Processing;
+    return stateIn({State::Recording, State::Processing});
 }
 
 bool AppEngine::isBusy() const
 {
-    return recordingState() == RecordingState::Processing
-           || recordingState() == RecordingState::Preparing;
+    return stateIn({State::Processing, State::Preparing});
 }
 
 void AppEngine::setLanguageIndex(int index)
 {
-    assert(index >= 0 && index < int(language_table.size()));
+    assert(index >= 0 && index < int(languageList_.size()));
     if (language_index_ != index) {
         language_index_ = index;
         emit languageIndexChanged(index);
         emit stateFlagsChanged();
-        QSettings{}.setValue("transcribe.language", index);
+        QSettings{}.setValue("transcribe.language", QString::fromUtf8(languageList_.at(index).whisper_language));
     }
 }
 
-void AppEngine::setModelIndex(int index)
-{
-    assert(index >= 0 && index < int(model_table.size()));
-    if (model_index_ != index) {
-        model_index_ = index;
-        emit modelIndexChanged(index);
+void AppEngine::setTranscribeModelName(const QString &name) {
+    if (transcribe_model_name_ != name) {
+        transcribe_model_name_ = name;
+        emit transcribeModelNameChanged();
         emit stateFlagsChanged();
-        QSettings{}.setValue("transcribe.model", index);
+        if (const auto mi = ModelMgr::instance().findModelByName(ModelKind::WHISPER, name)) {
+            QSettings{}.setValue("transcribe.model", QString::fromUtf8((mi->id)));
+        }
     }
 }
 
-void AppEngine::setPostModelIndex(int index)
-{
-    assert(index >= 0 && index < int(model_table.size()));
-    if (post_model_index_ != index) {
-        post_model_index_ = index;
-        emit postModelIndexChanged(index);
+void AppEngine::setTranscribePostModelName(const QString &name) {
+    if (transcribe_post_model_name_ != name) {
+        transcribe_post_model_name_ = name;
+        emit postTranscribeModelNameChanged();
         emit stateFlagsChanged();
-        QSettings{}.setValue("transcribe.post-model", index);
+        if (const auto mi = ModelMgr::instance().findModelByName(ModelKind::WHISPER, name)) {
+            QSettings{}.setValue("transcribe.post-model", QString::fromUtf8((mi->id)));
+        }
     }
 }
 
-void AppEngine::setRecordingState(RecordingState newState)
+
+void AppEngine::setState(State newState)
 {    
-    if (recording_state_ != newState) {
-        LOG_DEBUG_N << "Recording state changed from " << recording_state_ << " to " << newState;
-        recording_state_ = newState;
-        emit recordingStateChanged(newState);
+    if (state_ != newState) {
+        LOG_DEBUG_N << "Recording state changed from " << state_ << " to " << newState;
+        state_ = newState;
+        emit stateChanged(newState);
         emit stateFlagsChanged();
         setStateText();
     }
@@ -295,7 +362,7 @@ void AppEngine::setRecordingState(RecordingState newState)
 QCoro::Task<void> AppEngine::startPrepareForRecording()
 {
     LOG_INFO_N << "Preparing for recording";
-    setRecordingState(RecordingState::Preparing);
+    setState(State::Preparing);
 
     if (!chunk_queue_) {
         chunk_queue_ = make_shared<chunk_queue_t>();
@@ -332,48 +399,117 @@ QCoro::Task<void> AppEngine::startPrepareForRecording()
     co_return;
 }
 
+QCoro::Task<void> AppEngine::startPrepareForChat(QString name)
+{
+    LOG_INFO_N << "Preparing for chat with model: " << name;
+
+    setStateText(tr("Preparing chat model..."));
+
+    auto chat_model = ModelMgr::instance().findModelByName(ModelKind::GENERAL, name);
+
+    if (!chat_model) {
+        failed(tr("Chat model not found: ") + name);
+        co_return;
+    }
+
+    assert(chat_model);
+
+    co_await prepareGeneralModel(
+        "chat-model",
+        std::string{chat_model->id},
+        false // Don't load yet
+        );
+
+    setState(State::Ready);
+
+    co_return;
+}
+
 QCoro::Task<bool> AppEngine::prepareTranscriberModels()
 {
     // Live transcriber.Optional.
     assert(rec_transcriber_ == nullptr);
-    if (model_index_ > 0) {
-        const auto &model = model_table.at(size_t(model_index_));
-        const auto language = language_table.at(size_t(language_index_));
-        const auto model_id = getTranscriberModelId(model, language);
-        if (rec_transcriber_ = co_await prepareModel(
-            "live-transcriber"s,
-            model_id,
-            language.whisper_language,
-            true, // Load the live transcriber so it reacts faster when we start recording
-            (post_model_index_ < 1) // Submit final text?
-            ); !rec_transcriber_) {
-            co_return failed(tr("Failed to prepare live transcriber") + ": " + QString::fromUtf8(model.name));
+    const auto whisper_models = ModelMgr::instance().availableModels(ModelKind::WHISPER, ModelInfo::Capability::Transcribe);
+    if (!transcribe_model_name_.isEmpty() && !transcribe_model_name_.startsWith('[')) {
+
+        if (auto model = ModelMgr::instance().findModelByName(ModelKind::WHISPER, transcribe_model_name_); model) {
+
+            LOG_DEBUG_N << "Preparing live transcriber model: " << transcribe_model_name_;
+
+            const auto language = languageList_.at(size_t(language_index_));
+            const auto model_id = model->id;
+            if (rec_transcriber_ = co_await prepareTranscriber(
+                    "live-transcriber"s,
+                    model_id,
+                    language.whisper_language,
+                    true, // Load the live transcriber so it reacts faster when we start recording
+                    transcribe_post_model_name_.isEmpty() // Submit final text?
+                    ); !rec_transcriber_) {
+                co_return failed(tr("Failed to prepare live transcriber") + ": " + QString::fromUtf8(model->name));
+            }
+
+        } else {
+            co_return failed(tr("Transcription model not found") + ": " + transcribe_model_name_);
         }
     }
 
-    assert(post_transcriber_ == nullptr);
-    if (post_model_index_ > 0) {
-        const auto &model = model_table.at(size_t(post_model_index_));
-        const auto language = language_table.at(size_t(language_index_));
-        const auto model_id = getTranscriberModelId(model, language);
+    // same with post_transcriber_ and transcribe_post_model_name_
+    if (!transcribe_post_model_name_.isEmpty() && !transcribe_model_name_.startsWith('[')) {
 
-        if (post_transcriber_ = co_await prepareModel(
-                "post-transcriber"s,
-                model_id,
-                language.whisper_language,
-                false, // Be lazy
-                true // Submit final text
-                ); !post_transcriber_) {
-            co_return failed(tr("Failed to prepare post-recording transcriber") + ": " + QString::fromUtf8(model.name));
+        if (auto model = ModelMgr::instance().findModelByName(ModelKind::WHISPER, transcribe_post_model_name_); model) {
+
+            LOG_DEBUG_N << "Preparing post transcriber model: " << transcribe_post_model_name_;
+
+            const auto language = languageList_.at(size_t(language_index_));
+            const auto model_id = model->id;
+            if (post_transcriber_ = co_await prepareTranscriber(
+                    "post--transcriber"s,
+                    model_id,
+                    language.whisper_language,
+                    true, // Load the live transcriber so it reacts faster when we start recording
+                    true // Submit final text?
+                    ); !rec_transcriber_) {
+                co_return failed(tr("Failed to prepare post transcriber") + ": " + QString::fromUtf8(model->name));
+            }
+
+        } else {
+            co_return failed(tr("Transcription model not found") + ": " + transcribe_post_model_name_);
         }
     }
 
-    setRecordingState(RecordingState::Ready);
+    setState(State::Ready);
 
     co_return true;
 }
 
-QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareModel(
+QCoro::Task<std::shared_ptr<GeneralModel> > AppEngine::prepareGeneralModel(
+    std::string name, std::string_view modelId, bool loadModel)
+{
+    auto params = make_unique<Model::Config>();
+    params->model_name = modelId;
+    params->submit_filal_text = true;
+    shared_ptr<GeneralModel> model = make_shared<GeneralModel>(name, std::move(params));
+
+    // Relay error signals
+    connect(
+        model.get(),
+        &GeneralModel::errorOccurred,
+        this,
+        [this](const QString &msg) {
+            failed(msg);
+        }
+    );
+
+    co_await model->init(QString::fromUtf8(modelId));
+
+    if (loadModel) {
+        co_await model->loadModel();
+    }
+
+    co_return model;
+}
+
+QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareTranscriber(
     std::string name, string_view modelId, string_view language,
     bool loadModel, bool submitFilalText)
 {
@@ -433,7 +569,6 @@ void AppEngine::onFinalRecordingTextAvailable(const QString &text)
     LOG_INFO_N << "Final text available: " << text.toStdString();
     current_recorded_text_ = text;
     emit recordedTextChanged();
-    //setRecordingState(RecordingState::Done);
 }
 
 QCoro::Task<void> AppEngine::transcribeChunks()
@@ -455,7 +590,7 @@ QCoro::Task<void> AppEngine::onRecordingDone()
             rec_transcriber_->stopTranscribing();
         }
 
-        setRecordingState(RecordingState::Processing);
+        setState(State::Processing);
         assert(post_transcriber_->haveModel());
         if (!post_transcriber_->isLoaded()) {
             co_await post_transcriber_->loadModel();
@@ -467,21 +602,21 @@ QCoro::Task<void> AppEngine::onRecordingDone()
         }
     }
 
-    setRecordingState(RecordingState::Done);
+    setState(State::Done);
 }
 
 bool AppEngine::failed(const QString &why)
 {
     LOG_ERROR_N << "Recording failed: " << why;
     emit errorOccurred(why);
-    setRecordingState(RecordingState::Error);
+    setState(State::Error);
     return false;
 }
 
 QCoro::Task<void> AppEngine::doReset()
 {
     LOG_DEBUG_N << "Resetting AppEngine";
-    setRecordingState(RecordingState::Resetting);
+    setState(State::Resetting);
 
     if (rec_transcriber_) {
         co_await rec_transcriber_->stop();
@@ -505,7 +640,7 @@ QCoro::Task<void> AppEngine::doReset()
     chunk_queue_.reset();
 
     current_recorded_text_.clear();
-    setRecordingState(RecordingState::Idle);
+    setState(State::Idle);
     emit recordedTextChanged();
     LOG_TRACE_N << "Reset done";
 }
@@ -525,7 +660,7 @@ void AppEngine::setStateText(QString text) {
     });
 
     if (text.isEmpty()) {
-        text = rec_names.at(static_cast<int>(recording_state_));
+        text = rec_names.at(static_cast<int>(state_));
     }
 
     if (text != state_text_) {
@@ -533,4 +668,124 @@ void AppEngine::setStateText(QString text) {
         state_text_ = text;
         emit stateTextChanged();
     }
+}
+
+void AppEngine::prepareLanguages()
+{
+    languageList_.clear();
+
+    auto add = [this](const char* displayName, std::string_view whisperCode) {
+        languageList_.append(Language{tr(displayName), whisperCode});
+    };
+
+    // =======================================================
+    // EU OFFICIAL LANGUAGES
+    // =======================================================
+    add("Bulgarian",   "bg");
+    add("Croatian",    "hr");
+    add("Czech",       "cs");
+    add("Danish",      "da");
+    add("Dutch",       "nl");
+    add("English",     "en");
+    add("Estonian",    "et");
+    add("Finnish",     "fi");
+    add("French",      "fr");
+    add("German",      "de");
+    add("Greek",       "el");
+    add("Hungarian",   "hu");
+    add("Irish",       "ga");
+    add("Italian",     "it");
+    add("Latvian",     "lv");
+    add("Lithuanian",  "lt");
+    add("Maltese",     "mt");
+    add("Polish",      "pl");
+    add("Portuguese",  "pt");
+    add("Romanian",    "ro");
+    add("Slovak",      "sk");
+    add("Slovenian",   "sl");
+    add("Spanish",     "es");
+    add("Swedish",     "sv");
+
+    // =======================================================
+    // EUROPE / NEAR-EU (COMMON)
+    // =======================================================
+    add("Norwegian",   "no");
+    add("Icelandic",   "is");
+
+    add("Albanian",    "sq");
+    add("Bosnian",     "bs");
+    add("Macedonian",  "mk");
+    add("Serbian",     "sr");
+
+    add("Turkish",     "tr");
+    add("Ukrainian",   "uk");
+    add("Russian",     "ru");
+
+    // =======================================================
+    // AMERICAS
+    // =======================================================
+    add("Portuguese (Brazil)", "pt");  // Whisper distinguishes via accent, not code
+    add("Spanish (Latin America)", "es");
+
+    // =======================================================
+    // MIDDLE EAST & AFRICA
+    // =======================================================
+    add("Arabic",      "ar");
+    add("Hebrew",      "he");
+    add("Persian",     "fa");
+    add("Swahili",     "sw");
+    add("Afrikaans",   "af");
+    add("Amharic",     "am");
+
+    // =======================================================
+    // SOUTH ASIA
+    // =======================================================
+    add("Hindi",       "hi");
+    add("Urdu",        "ur");
+    add("Bengali",     "bn");
+    add("Tamil",       "ta");
+    add("Telugu",      "te");
+    add("Marathi",     "mr");
+
+    // =======================================================
+    // EAST & SOUTHEAST ASIA
+    // =======================================================
+    add("Chinese",     "zh");
+    add("Japanese",    "ja");
+    add("Korean",      "ko");
+
+    add("Vietnamese",  "vi");
+    add("Thai",        "th");
+    add("Indonesian",  "id");
+    add("Malay",       "ms");
+    add("Filipino",    "tl");
+
+    // =======================================================
+    // OCEANIA
+    // =======================================================
+    add("Maori",       "mi");
+
+    // Sort by name
+    {
+        QCollator coll;
+        coll.setNumericMode(true);
+        coll.setCaseSensitivity(Qt::CaseInsensitive);
+
+        std::ranges::sort(languageList_,
+                          [&](const Language& a, const Language& b) {
+                              return coll.compare(a.name, b.name) < 0;
+                          });
+    }
+
+    languageList_.insert(languageList_.begin(), Language{tr("[Auto]"), ""});
+
+    // Populate languages_
+
+    languages_.clear();
+    languages_.reserve(languageList_.size());
+    for (const auto &lang : languageList_) {
+        languages_.append(lang.name);
+    }
+
+    emit languagesChanged();
 }

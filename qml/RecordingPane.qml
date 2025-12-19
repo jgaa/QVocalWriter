@@ -10,6 +10,24 @@ Item {
     id: root
     implicitHeight: column.implicitHeight
 
+    function indexOfModel(model, name) {
+        if (!model || !name)
+            return -1
+
+        for (let i = 0; i < model.length; ++i) {
+            if (model[i] === name)
+                return i
+        }
+        return -1
+    }
+
+    function nameAtIndex(model, index) {
+        if (!model || index < 0 || index >= model.length)
+            return ""
+        return model[index]
+    }
+
+
     ColumnLayout {
         id: column
         anchors.fill: parent
@@ -36,7 +54,7 @@ Item {
                         appEngine.currentMic = currentIndex
                 }
 
-                enabled: appEngine.recordingState === AppEngine.Idle
+                enabled: appEngine.state === AppEngine.Idle
             }
         }
 
@@ -62,8 +80,8 @@ Item {
                         appEngine.languageIndex = currentIndex
                 }
 
-                enabled: appEngine.recordingState === AppEngine.Idle
-                      || appEngine.recordingState === AppEngine.Error
+                enabled: appEngine.state === AppEngine.Idle
+                      || appEngine.state === AppEngine.Error
             }
         }
 
@@ -78,17 +96,39 @@ Item {
             }
 
             ComboBox {
-                id: modelCombo
+                id: transcribeModelCombo
                 Layout.fillWidth: true
-                model: appEngine.modelSizes
-                currentIndex: appEngine.modelIndex
+                model: appEngine.transcribeModels
+                currentIndex: -1
 
-                onCurrentIndexChanged: {
-                    if (currentIndex !== appEngine.modelIndex)
-                        appEngine.modelIndex = currentIndex
+                Component.onCompleted: {
+                    currentIndex = indexOfModel(
+                        appEngine.transcribeModels,
+                        appEngine.transcribeModelName
+                    )
                 }
 
-                enabled: appEngine.recordingState === AppEngine.Idle
+                onCurrentIndexChanged: {
+                    appEngine.transcribeModelName =
+                        nameAtIndex(appEngine.transcribeModels, currentIndex)
+                }
+
+                Connections {
+                    target: appEngine
+
+                    function onTranscribeModelNameChanged() {
+                        transcribeModelCombo.currentIndex =
+                            indexOfModel(appEngine.transcribeModels,
+                                         appEngine.transcribeModelName)
+                    }
+
+                    // Your model list NOTIFY signal
+                    function onLanguageIndexChanged() {
+                        transcribeModelCombo.currentIndex =
+                            indexOfModel(appEngine.transcribeModels,
+                                         appEngine.transcribeModelName)
+                    }
+                }
             }
         }
 
@@ -104,19 +144,38 @@ Item {
             ComboBox {
                 id: postModelCombo
                 Layout.fillWidth: true
-                model: appEngine.modelSizes
-                currentIndex: appEngine.postModelIndex
+                model: appEngine.transcribeModels
+                currentIndex: -1
 
-                onCurrentIndexChanged: {
-                    if (currentIndex !== appEngine.postModelIndex)
-                        appEngine.postModelIndex = currentIndex
+                Component.onCompleted: {
+                    currentIndex = indexOfModel(
+                        appEngine.transcribeModels,
+                        appEngine.transcribePostModelName
+                    )
                 }
 
-                enabled: appEngine.recordingState === AppEngine.Idle
+                onCurrentIndexChanged: {
+                    appEngine.transcribePostModelName =
+                        nameAtIndex(appEngine.transcribeModels, currentIndex)
+                }
 
+                Connections {
+                    target: appEngine
+
+                    function onTranscribePostModelNameChanged() {
+                        postModelCombo.currentIndex =
+                            indexOfModel(appEngine.transcribeModels,
+                                         appEngine.transcribePostModelName)
+                    }
+
+                    function onLanguageIndexChanged() {
+                        postModelCombo.currentIndex =
+                            indexOfModel(appEngine.transcribeModels,
+                                         appEngine.transcribePostModelName)
+                    }
+                }
             }
         }
-
 
         // --- Prepare button ---
         Button {
@@ -206,8 +265,8 @@ Item {
             id: startStopButton
             Layout.fillWidth: true
 
-            text: (appEngine.recordingState === AppEngine.Recording
-                   || appEngine.recordingState === AppEngine.Processing)
+            text: (appEngine.state === AppEngine.Recording
+                   || appEngine.state === AppEngine.Processing)
                   ? qsTr("Stop")
                   : qsTr("Start")
 
@@ -216,8 +275,8 @@ Item {
             background: Rectangle {
                 // simple color cue; adjust to your style
                 radius: 4
-                color: (appEngine.recordingState === AppEngine.Recording
-                        || appEngine.recordingState === AppEngine.Processing)
+                color: (appEngine.state === AppEngine.Recording
+                        || appEngine.state === AppEngine.Processing)
                        ? "#c62828" // red-ish
                        : "#2e7d32" // green-ish
             }
@@ -250,7 +309,7 @@ Item {
 
             Button {
                 text: qsTr("Save Transcript")
-                enabled: appEngine.recordingState == AppEngine.Done
+                enabled: appEngine.state == AppEngine.Done
 
                 onClicked: {
                     saveTranscriptDialog.open()
@@ -259,8 +318,8 @@ Item {
 
             Button {
                 text: qsTr("Reset")
-                enabled: appEngine.recordingState == AppEngine.Done
-                      || appEngine.recordingState == AppEngine.Error
+                enabled: appEngine.state == AppEngine.Done
+                      || appEngine.state == AppEngine.Error
                 onClicked: {
                     appEngine.reset();
                 }
