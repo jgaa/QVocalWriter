@@ -12,14 +12,16 @@
 
 namespace logfault_fwd {
 
+// Same as logfault::LogLevel
 enum class Level { NONE, ERROR, WARN, NOTICE, INFO, DEBUG, TRACE };
 
 struct SourceLoc {
-    const char* file;
-    int line;
-    const char* func;
+    const char* file{};
+    int line{};
+    const char* func{};
 };
 
+// The callback type for log forwarding to the actual logger used by the app (e.g., logfault)
 using logfault_callback_t = std::function<void(Level lvl, SourceLoc loc, std::string_view msg, std::string_view tag)>;
 
 inline std::string_view to_name(Level l) {
@@ -96,12 +98,12 @@ private:
 };
 
 #ifdef _LOGFAULT_H
-static void forward_to_logfault(logfault_fwd::Level lvl,
+static inline void forward_to_logfault(logfault_fwd::Level lvl,
                                 logfault_fwd::SourceLoc loc,
                                 std::string_view msg,
                                 std::string_view tag) {
 
-    const auto lf_level = reinterpret_cast<logfault::LogLevel>(lvl);
+    const auto lf_level = static_cast<logfault::LogLevel>(lvl);
     if ( ::logfault::LogManager::Instance().IsRelevant(lf_level)) {
         ::logfault::Log(lf_level, loc.file, loc.line, loc.func).Line() << tag << ' '<< msg;
     }
@@ -110,6 +112,7 @@ static void forward_to_logfault(logfault_fwd::Level lvl,
 
 } // namespace logfault_fwd
 
+#if defined(LOGFAULT_FWD_ENABLE_LOGGING) && LOGFAULT_FWD_ENABLE_LOGGING
 
 #if defined(__GNUC__) || defined(__clang__)
 #define LOGFAULT_FWD_FUNC __PRETTY_FUNCTION__
@@ -120,10 +123,17 @@ static void forward_to_logfault(logfault_fwd::Level lvl,
 #define LOGFAULT_FWD_RELEVANT(lvl) \
     (lvl <= logfault_fwd::level())
 
-#define LOG_ERROR  LOGFAULT_FWD_RELEVANT(logfault_fwd::Level::ERROR) && logfault_fwd::Log(logfault_fwd::Level::ERROR,  {__FILE__, __LINE__, LOGFAULT_FWD_FUNC}).Line()
-#define LOG_WARN   LOGFAULT_FWD_RELEVANT(logfault_fwd::Level::WARN) && logfault_fwd::Log(logfault_fwd::Level::WARN,    {__FILE__, __LINE__, LOGFAULT_FWD_FUNC}).Line()
-#define LOG_INFO   LOGFAULT_FWD_RELEVANT(logfault_fwd::Level::INFO) && logfault_fwd::Log(logfault_fwd::Level::INFO,    {__FILE__, __LINE__, LOGFAULT_FWD_FUNC}).Line()
-#define LOG_DEBUG  LOGFAULT_FWD_RELEVANT(logfault_fwd::Level::DEBUG) && logfault_fwd::Log(logfault_fwd::Level::DEBUG,   {__FILE__, __LINE__, LOGFAULT_FWD_FUNC}).Line()
-#define LOG_TRACE  LOGFAULT_FWD_RELEVANT(logfault_fwd::Level::TRACE) && logfault_fwd::Log(logfault_fwd::Level::TRACE,   {__FILE__, __LINE__, LOGFAULT_FWD_FUNC}).Line()
+#define LOG_ERROR  LOGFAULT_FWD_RELEVANT(logfault_fwd::Level::ERROR) && logfault_fwd::Log(logfault_fwd::Level::ERROR,{}).Line()
+#define LOG_WARN   LOGFAULT_FWD_RELEVANT(logfault_fwd::Level::WARN) && logfault_fwd::Log(logfault_fwd::Level::WARN,{}).Line()
+#define LOG_INFO   LOGFAULT_FWD_RELEVANT(logfault_fwd::Level::INFO) && logfault_fwd::Log(logfault_fwd::Level::INFO,{}).Line()
+#define LOG_DEBUG  LOGFAULT_FWD_RELEVANT(logfault_fwd::Level::DEBUG) && logfault_fwd::Log(logfault_fwd::Level::DEBUG,{}).Line()
+#define LOG_TRACE  LOGFAULT_FWD_RELEVANT(logfault_fwd::Level::TRACE) && logfault_fwd::Log(logfault_fwd::Level::TRACE,{}).Line()
 
+#define LOG_ERROR_N  LOGFAULT_FWD_RELEVANT(logfault_fwd::Level::ERROR) && logfault_fwd::Log(logfault_fwd::Level::ERROR,  {__FILE__, __LINE__, LOGFAULT_FWD_FUNC}).Line()
+#define LOG_WARN_N   LOGFAULT_FWD_RELEVANT(logfault_fwd::Level::WARN) && logfault_fwd::Log(logfault_fwd::Level::WARN,    {__FILE__, __LINE__, LOGFAULT_FWD_FUNC}).Line()
+#define LOG_INFO_N   LOGFAULT_FWD_RELEVANT(logfault_fwd::Level::INFO) && logfault_fwd::Log(logfault_fwd::Level::INFO,    {__FILE__, __LINE__, LOGFAULT_FWD_FUNC}).Line()
+#define LOG_DEBUG_N  LOGFAULT_FWD_RELEVANT(logfault_fwd::Level::DEBUG) && logfault_fwd::Log(logfault_fwd::Level::DEBUG,   {__FILE__, __LINE__, LOGFAULT_FWD_FUNC}).Line()
+#define LOG_TRACE_N  LOGFAULT_FWD_RELEVANT(logfault_fwd::Level::TRACE) && logfault_fwd::Log(logfault_fwd::Level::TRACE,   {__FILE__, __LINE__, LOGFAULT_FWD_FUNC}).Line()
+
+#endif // LOGFAULT_FWD_ENABLE_LOGGING
 

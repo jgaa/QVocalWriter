@@ -14,10 +14,13 @@
 #include <qcoronetworkreply.h>
 #include <qcoroiodevice.h>
 
+#include "logging.h"
+
 #include "qvw/WhisperEngine.h"
+#include "qvw/LlamaEngine.h"
 #include "ModelMgr.h"
 #include "ScopedTimer.h"
-#include "logging.h"
+
 
 using namespace std;
 
@@ -297,10 +300,28 @@ qvw::WhisperEngine &ModelMgr::whisperEngine() {
             LOG_ERROR_N << "Failed to create Whisper engine instance.";
             throw std::runtime_error{"Failed to create Whisper engine instance."};
         }
+
+        whisper_engine_->setLogger(logfault_fwd::forward_to_logfault);
     }
 
     assert(whisper_engine_);
     return *whisper_engine_;
+}
+
+qvw::LlamaEngine &ModelMgr::llamaEngine()
+{
+    if (!llama_engine_) {
+        llama_engine_ = qvw::LlamaEngine::create({});
+        if (!llama_engine_) {
+            LOG_ERROR_N << "Failed to create Llama engine instance.";
+            throw std::runtime_error{"Failed to create Llama engine instance."};
+        }
+
+        llama_engine_->setLogger(logfault_fwd::forward_to_logfault);
+    }
+
+    assert(llama_engine_);
+    return *llama_engine_;
 }
 
 QCoro::Task<bool> ModelMgr::makeAvailable(ModelKind kind, const ModelInfo &modelInfo) noexcept
@@ -620,6 +641,9 @@ bool ModelInstance::load(ModelKind kind)
     case ModelKind::WHISPER: {
         return loadWhisper();
     }
+    case ModelKind::GENERAL: {
+        return loadLlama();
+    }
     default:
         LOG_ERROR_N << "Unknown model kind requested for loading.";
         return false;
@@ -640,6 +664,24 @@ bool ModelInstance::loadWhisper()
         return false;
     }
     LOG_INFO_N << "Whisper model \"" << modelId() << "\" loaded in "
+                << timer.elapsed() << " seconds from path: " << full_path_;
+    emit modelReady();
+    return true;
+}
+
+bool ModelInstance::loadLlama()
+{
+    auto& llama_engine = ModelMgr::instance().llamaEngine();
+    const filesystem::path path = full_path_.toStdString();
+    qvw::LlamaEngineLoadParams params;
+    ScopedTimer timer;
+    LOG_DEBUG_N << "Loading Llama model \"" << modelId() << "\" from path: " << full_path_;
+    model_ctx_ = llama_engine.loadLlama(modelId().toStdString(), path, params);
+    if (!model_ctx_) {
+        LOG_ERROR_N << "Failed to load Llama model from path: " << full_path_;
+        return false;
+    }
+    LOG_INFO_N << "Llama model \"" << modelId() << "\" loaded in "
                 << timer.elapsed() << " seconds from path: " << full_path_;
     emit modelReady();
     return true;

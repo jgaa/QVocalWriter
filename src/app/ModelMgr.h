@@ -29,6 +29,7 @@ enum class ModelKind {
 
 namespace qvw {
 class WhisperEngine;
+class LlamaEngine;
 }
 
 
@@ -76,6 +77,7 @@ signals:
  protected:
     bool load(ModelKind kind);
     bool loadWhisper();
+    bool loadLlama();
 
 //     virtual bool loadImpl() noexcept = 0;
 //     virtual bool unloadImpl() noexcept = 0;
@@ -161,6 +163,7 @@ public:
     std::optional<ModelInfo> findModelByName(ModelKind kind, const QString& name) const noexcept;
 
     qvw::WhisperEngine& whisperEngine();
+    qvw::LlamaEngine& llamaEngine();
 
 signals:
     void downloadProgress(QString name, qint64 bytesReceived, qint64 bytesTotal);
@@ -185,6 +188,7 @@ private:
     QNetworkAccessManager *nam_{};
     std::array<instances_map_t, 2 /* Kind */> instances_;
     std::shared_ptr<qvw::WhisperEngine> whisper_engine_;
+    std::shared_ptr<qvw::LlamaEngine> llama_engine_;
     static ModelMgr *self_;
 };
 

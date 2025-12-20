@@ -2,10 +2,13 @@
 
 #include <string>
 #include <memory>
+#include <thread>
 #include <string_view>
 #include <filesystem>
 #include <cassert>
 #include <functional>
+
+#include "log_wrapper.h"
 
 /*! Only pure interfaces here. The implementations will be in separate libraries.
  */
@@ -13,6 +16,7 @@
 namespace qvw {
 
 class EngineBase;
+class LlamaEngine;
 class WhisperSessionCtx;
 class LlamaSessionCtx;
 
@@ -132,6 +136,30 @@ public:
     virtual std::shared_ptr<ModelCtx> load(const std::string& modelId, const std::filesystem::path& modelPath, const EngineLoadParams& params) = 0;
 
     virtual int numLoadedModels() const noexcept = 0;
+
+    virtual void setLogger(logfault_fwd::logfault_callback_t cb) = 0;
+
+    /*! Determines the optimal number of threads to use based on hardware concurrency.
+     *
+     * If a specific thread count is provided via the parameter, it can be used instead.
+     * The method ensures that a reasonable number of threads are used based on the system's capabilities.
+     *
+     * @param threadsFromParam Optional parameter specifying the desired number of threads.
+     * @return The determined number of threads to use.
+     */
+    static int getThreads(int threadsFromParam = -1) {
+        if (const auto thds = std::thread::hardware_concurrency(); thds > 4) {
+            if (thds > 32) {
+                return static_cast<int>(thds -4);
+            } else if (thds > 4) {
+                return static_cast<int>(thds -1);
+            } else {
+                return static_cast<int>(thds);
+            }
+        }
+
+        return 4;
+    }
 
 };
 

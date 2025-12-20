@@ -1,3 +1,5 @@
+#define LOGFAULT_FWD_ENABLE_LOGGING 1
+
 #include <atomic>
 #include <cassert>
 #include <cstdint>
@@ -36,6 +38,33 @@ static void llamaLogger(ggml_log_level level, const char * text, void *) {
     case GGML_LOG_LEVEL_NONE:  break;
     }
 }
+
+static std::string tokenToPiece(const llama_vocab * vocab, llama_token tok) {
+    // small stack buffer for common cases
+    array<char, 64> tmp{};
+
+    // lstrip = 0 (don’t strip), special = false (don’t render special tokens)
+    int32_t n = llama_token_to_piece(vocab, tok, tmp.data(), tmp.size(), 0, false);
+
+    if (n >= 0) {
+        return std::string(tmp.data(), tmp.data() + n);
+    }
+
+    // need a bigger buffer; n is negative, -n is required length
+    const int32_t need = -n;
+    std::string out;
+    out.resize((size_t)need);
+
+    n = llama_token_to_piece(vocab, tok, out.data(), need, 0, false);
+    if (n < 0) {
+        // if this happens something is inconsistent; return empty to be safe
+        return {};
+    }
+
+    out.resize((size_t)n);
+    return out;
+}
+
 
 class LlamaImpl;
 class LlamaCtxImpl;
@@ -84,6 +113,7 @@ private:
     const llama_vocab * vocab_{nullptr};
 
     int32_t n_past_{0};
+    int32_t last_logits_idx_ = 0;
 
     string final_text_;
     function<void(const string&)> on_partial_text_callback_;
@@ -133,7 +163,7 @@ private:
 
     llama_model * model_{nullptr};
 
-    int threads_{-1};
+    int threads_{EngineBase::getThreads()};
     int ctx_size_{4096};
 };
 
@@ -212,7 +242,7 @@ public:
             return {};
         }
 
-        const int threads = (params.threads > 0) ? params.threads : -1;
+        const int threads = EngineBase::getThreads(params.threads);
         const int ctx_size = (params.ctx_size > 0) ? params.ctx_size : 4096;
 
         auto ctx = make_shared<LlamaCtxImpl>(*this, modelId, model, threads, ctx_size);
@@ -222,6 +252,10 @@ public:
 
     void onModelUnloaded() noexcept {
         --num_loaded_models_;
+    }
+
+    void setLogger(logfault_fwd::logfault_callback_t cb) override {
+        logfault_fwd::setCallback(std::move(cb), "LlamaEngine");
     }
 
 private:
@@ -275,6 +309,7 @@ LlamaSessionCtxImpl::LlamaSessionCtxImpl(shared_ptr<LlamaCtxImpl> modelCtx)
 
     // llama.cpp uses -1 as “auto” in some configs; keeping your supplied threads if >0.
     if (model_ctx_->threads() > 0) {
+        LOG_DEBUG << "Setting llama_context n_threads* to " << model_ctx_->threads();
         cparams.n_threads = model_ctx_->threads();
         cparams.n_threads_batch = model_ctx_->threads();
     }
@@ -304,10 +339,13 @@ bool LlamaSessionCtxImpl::evalTokens(span<const llama_token> toks) {
         batch.pos[i]       = n_past_ + i;
 
         batch.n_seq_id[i]  = 1;
-        batch.seq_id[i][0] = 0; // single sequence id 0
+        batch.seq_id[i][0] = 0;
 
-        batch.logits[i]    = (i == batch.n_tokens - 1) ? 1 : 0; // request logits only for last token
+        batch.logits[i]    = (i == batch.n_tokens - 1) ? 1 : 0;
     }
+
+    // We requested logits for the last token in this batch:
+    last_logits_idx_ = batch.n_tokens - 1;
 
     const int rc = llama_decode(ctx_, batch);
     llama_batch_free(batch);
@@ -321,13 +359,17 @@ bool LlamaSessionCtxImpl::evalTokens(span<const llama_token> toks) {
     return true;
 }
 
+
 bool LlamaSessionCtxImpl::promptImpl(string_view text, const Params & params) {
     final_text_.clear();
     n_past_ = 0;
 
+    LOG_DEBUG << "Prompting Llama model with text: " << text;
+
     // ---- tokenize prompt (vocab-based API) ----
     vector<llama_token> prompt_tokens(text.size() + 8);
 
+    LOG_DEBUG << "Tokenizing prompt text of size " << text.size();
     int32_t n_prompt = llama_tokenize(
         vocab_,
         text.data(),
@@ -344,58 +386,63 @@ bool LlamaSessionCtxImpl::promptImpl(string_view text, const Params & params) {
     }
     prompt_tokens.resize((size_t)n_prompt);
 
+    LOG_DEBUG << "Tokenized prompt into " << n_prompt << " tokens";
     if (!evalTokens(prompt_tokens)) {
         return false;
     }
 
+    LOG_DEBUG << "Evaluated prompt tokens, n_past=" << n_past_;
     // ---- sampler chain (current API) ----
-    llama_sampler * sampler = llama_sampler_chain_init(llama_sampler_chain_default_params());
+    auto sparams = llama_sampler_chain_default_params();
+    llama_sampler * smpl = llama_sampler_chain_init(sparams);
 
-    llama_sampler_chain_add(sampler, llama_sampler_init_top_k(params.top_k));
-    llama_sampler_chain_add(sampler, llama_sampler_init_top_p(params.top_p, /*min_keep*/ 1));
-    llama_sampler_chain_add(sampler, llama_sampler_init_temp(params.temperature));
+    // Put penalties early (so they affect candidates before truncation)
+    llama_sampler_chain_add(smpl, llama_sampler_init_penalties(
+                                      /*penalty_last_n*/ -1,
+                                      /*penalty_repeat*/ params.repeat_penalty,
+                                      /*penalty_freq*/   0.0f,
+                                      /*penalty_present*/0.0f
+                                      ));
 
-    // current penalties sampler replaces older repeat penalty samplers
-    llama_sampler_chain_add(sampler, llama_sampler_init_penalties(
-                                         /*penalty_last_n*/ -1,
-                                         /*penalty_repeat*/ params.repeat_penalty,
-                                         /*penalty_freq*/   0.0f,
-                                         /*penalty_present*/0.0f
-                                         ));
+    llama_sampler_chain_add(smpl, llama_sampler_init_top_k(params.top_k));
+    llama_sampler_chain_add(smpl, llama_sampler_init_top_p(params.top_p, /*min_keep*/ 1));
+    llama_sampler_chain_add(smpl, llama_sampler_init_temp(params.temperature));
 
-    // ---- generate ----
+    // *** REQUIRED: terminal sampler that chooses the token ***
+    llama_sampler_chain_add(smpl, llama_sampler_init_dist(/*seed*/ 1234));
+    // (or for debugging: llama_sampler_init_greedy())
+
+    llama_sampler_reset(smpl);
+
+    const llama_vocab * vocab = llama_model_get_vocab(model_);
+
+    // generation loop
+    LOG_DEBUG << "Starting generation loop for up to " << params.max_tokens << " tokens";
     for (int i = 0; i < params.max_tokens; ++i) {
-        const llama_token tok = llama_sampler_sample(sampler, ctx_, /*idx*/ -1);
-        llama_sampler_accept(sampler, tok);
+        // b7444 supports idx = -1 meaning "last logits in batch"
+        llama_token id = llama_sampler_sample(smpl, ctx_, -1);
 
-        if (tok == llama_vocab_eos(vocab_)) {
+        // IMPORTANT for penalties/repetition tracking:
+        llama_sampler_accept(smpl, id);
+
+        if (llama_vocab_is_eog(vocab, id)) {
             break;
         }
 
-        // token -> piece (vocab-based API)
-        char buf[4096];
-        const int32_t n = llama_token_to_piece(
-            vocab_,
-            tok,
-            buf,
-            (int32_t)sizeof(buf),
-            /*lstrip*/ 0,
-            /*special*/ false
-            );
-
-        if (n > 0) {
-            appendAndCallback(string_view(buf, (size_t)n));
+        const auto piece = tokenToPiece(vocab, id);
+        LOG_TRACE << "Sampled token id=" << id << " piece=\"" << piece << "\"";
+        final_text_ += piece;
+        if (on_partial_text_callback_) {
+            on_partial_text_callback_(piece);   // emit the *piece*, not the whole final_text_
         }
 
-        // feed sampled token back into model
-        llama_token t = tok;
-        if (!evalTokens(span<const llama_token>(&t, 1))) {
-            llama_sampler_free(sampler);
-            return false;
-        }
+        const llama_token toks[1] = { id };
+        if (!evalTokens(std::span{toks, 1})) break;
     }
 
-    llama_sampler_free(sampler);
+    LOG_DEBUG << "Generation loop complete, total n_past=" << n_past_;
+    llama_sampler_free(smpl);
+
     return true;
 }
 

@@ -88,6 +88,8 @@ public:
     void setTranscribeModelName(const QString& name);
     void setTranscribePostModelName(const QString& name);
     QString transcribePostModelName() const { return transcribe_post_model_name_;}
+    QString chatModelName() const;
+    void setChatModelName(const QString& name);
 
     int modelIndex(const QString& name) const;
 
@@ -111,6 +113,7 @@ signals:
     void languageIndexChanged(int newIndex);
     void transcribeModelNameChanged();
     void postTranscribeModelNameChanged();
+    void chatModelNameChanged();
     void stateFlagsChanged();
     void partialTextAvailable(const QString &text);
     void finalTextAvailable(const QString &text);
@@ -146,6 +149,7 @@ private:
     QCoro::Task<void> doReset();
     void setStateText(QString text = {});
     void prepareLanguages();
+    QCoro::Task<bool> sendChatPrompt(const QString& prompt);
 
     AudioController audio_controller_;
     State state_{State::Idle};
@@ -154,6 +158,7 @@ private:
     int language_index_{0}; // Auto
     QString transcribe_model_name_{};
     QString transcribe_post_model_name_{};
+    QString chat_model_name_{};
     QString pcm_file_path_;
     std::shared_ptr<chunk_queue_t> chunk_queue_;
     std::shared_ptr<AudioRecorder> recorder_;

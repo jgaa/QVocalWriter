@@ -111,9 +111,38 @@ void AppEngine::prepareForRecording()
     startPrepareForRecording();
 }
 
-void AppEngine::prepareForChat(const QString &modelName)
+void AppEngine::prepareForChat()
 {
-    startPrepareForChat(modelName);
+    if (chat_model_name_.isEmpty()) {
+        failed("Chat model name is empty.");
+        return;
+    }
+    startPrepareForChat(chat_model_name_);
+}
+
+void AppEngine::chatPrompt(const QString &prompt)
+{
+    sendChatPrompt(prompt);
+}
+
+QCoro::Task<bool> AppEngine::sendChatPrompt(const QString &prompt)
+{
+    if (!chat_model_) {
+        failed("Chat model is not prepared.");
+        co_return false;
+    }
+
+    if (!chat_model_->isLoaded()) {
+        failed ("Chat model is not loaded.");
+        co_return false;
+    }
+
+    LOG_INFO_N << "Sending chat prompt: " << prompt.toStdString();
+
+    setState(State::Processing);
+    auto result = co_await chat_model_->prompt(prompt, qvw::LlamaSessionCtx::Params::Chat());
+    setState(State::Ready);
+    co_return result;
 }
 
 void AppEngine::saveTranscriptToFile(const QUrl &path)
@@ -158,9 +187,9 @@ AppEngine::AppEngine() {
 
     {
         // We store the id, not the model name (which may be localized)
-        auto lookup_name = [](const QString &stored_value) -> QString {
+        auto lookup_name = [](const QString &stored_value, ModelKind kind) -> QString {
             const string target = stored_value.toStdString();
-            const auto models = ModelMgr::instance().availableModels(ModelKind::WHISPER);
+            const auto models = ModelMgr::instance().availableModels(kind);
             for (int i = 0; i < models.size(); ++i) {
                 if (models[(size_t(i))].id == target) {
                     return QString::fromUtf8(models[(size_t(i))].name);
@@ -169,8 +198,9 @@ AppEngine::AppEngine() {
             return {};
         };
 
-        transcribe_model_name_ = lookup_name(settings.value("transcribe.model", "").toString()); // None
-        transcribe_post_model_name_ = lookup_name(settings.value("transcribe.post-model", "base").toString());
+        transcribe_model_name_ = lookup_name(settings.value("transcribe.model", "").toString(), ModelKind::WHISPER); // None
+        transcribe_post_model_name_ = lookup_name(settings.value("transcribe.post-model", "base").toString(), ModelKind::WHISPER);
+        chat_model_name_ = lookup_name(settings.value("chat.model", "llama3.1-8b-instruct-q4_k_m").toString(), ModelKind::GENERAL);
     }
 
     const QString baseDir =
@@ -347,6 +377,23 @@ void AppEngine::setTranscribePostModelName(const QString &name) {
     }
 }
 
+QString AppEngine::chatModelName() const
+{
+    return chat_model_name_;
+}
+
+void AppEngine::setChatModelName(const QString &name)
+{
+    if (chat_model_name_ != name) {
+        chat_model_name_ = name;
+        emit chatModelNameChanged();
+        emit stateFlagsChanged();
+        if (const auto mi = ModelMgr::instance().findModelByName(ModelKind::GENERAL, name)) {
+            QSettings{}.setValue("chat.model", QString::fromUtf8((mi->id)));
+        }
+    }
+}
+
 
 void AppEngine::setState(State newState)
 {    
@@ -405,19 +452,18 @@ QCoro::Task<void> AppEngine::startPrepareForChat(QString name)
 
     setStateText(tr("Preparing chat model..."));
 
-    auto chat_model = ModelMgr::instance().findModelByName(ModelKind::GENERAL, name);
+    auto mi = ModelMgr::instance().findModelByName(ModelKind::GENERAL, name);
 
-    if (!chat_model) {
+    if (!mi) {
         failed(tr("Chat model not found: ") + name);
         co_return;
     }
 
-    assert(chat_model);
-
-    co_await prepareGeneralModel(
+    assert(mi);
+    chat_model_ = co_await prepareGeneralModel(
         "chat-model",
-        std::string{chat_model->id},
-        false // Don't load yet
+        std::string{mi->id},
+        true // Load it
         );
 
     setState(State::Ready);
@@ -789,3 +835,5 @@ void AppEngine::prepareLanguages()
 
     emit languagesChanged();
 }
+
+

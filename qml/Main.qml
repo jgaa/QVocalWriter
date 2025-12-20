@@ -127,15 +127,9 @@ Window {
                 }
 
                 // 2: INTERACTIVE (placeholder for now)
-                Item {
+                ChatPane {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: qsTr("Interactive view (coming soon)")
-                        color: "gray"
-                    }
                 }
             }
         }

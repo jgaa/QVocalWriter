@@ -49,6 +49,7 @@ QCoro::Task<bool> GeneralModel::prompt(const QString &text, const qvw::LlamaSess
 
         LOG_INFO_EX(*this) << "Prompt completed in "
                            << timer.elapsed() << " seconds.";
+        LOG_DEBUG_EX(*this) << "Full text result: " << session_ctx_->getFullTextResult();
 
         return result;
     });

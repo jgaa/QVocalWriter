@@ -1,4 +1,6 @@
 
+#define LOGFAULT_FWD_ENABLE_LOGGING 1
+
 #include <atomic>
 #include <format>
 #include <map>
@@ -215,6 +217,10 @@ public:
         --num_loaded_models_;
     }
 
+    void setLogger(logfault_fwd::logfault_callback_t cb) override {
+        logfault_fwd::setCallback(std::move(cb), "[whisper]");
+    }
+
 private:
 
     // Returns true if msg is empty
@@ -292,21 +298,7 @@ bool WhisperSessionCtxImpl::whisperFull(std::span<const float> data, const Whisp
     }
     // Set number of threads
 
-    if (params.threads > 0) {
-        p.n_threads = params.threads;
-    } else {
-        if (const auto thds = std::thread::hardware_concurrency(); thds > 4) {
-            if (thds > 32) {
-                p.n_threads = static_cast<int>(thds -4);
-            } else if (thds > 4) {
-                p.n_threads = static_cast<int>(thds -1);
-            } else {
-                p.n_threads = static_cast<int>(thds);
-            }
-        } else {
-            p.n_threads = 4;
-        }
-    }
+    p.n_threads = EngineBase::getThreads(params.threads);
 
     if (!params.language.empty()) {
         p.language = params.language.c_str();

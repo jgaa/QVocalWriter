@@ -146,7 +146,7 @@ public:
 
     struct LlamaCreateParams {};
 
-    static QVW_LLAMA_WRAP_API std::shared_ptr<LlamaEngine> create(const LlamaCreateParams& params);
+    static QVW_LLAMA_WRAP_API std::shared_ptr<::qvw::LlamaEngine> create(const LlamaCreateParams& params);
 
     virtual std::shared_ptr<LlamaCtx> loadLlama(const std::string& modelId,
                                                 const std::filesystem::path& modelPath,
