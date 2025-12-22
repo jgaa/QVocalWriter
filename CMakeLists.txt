@@ -141,6 +141,8 @@ add_dependencies(qvw::llama_wrap qvw_llama_wrap_ep)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Quick Qml Multimedia)
 find_package(Qt6 REQUIRED COMPONENTS Core)
+find_package(Qt6 REQUIRED COMPONENTS Core)
+find_package(Qt6 REQUIRED COMPONENTS Core)
 
 qt_standard_project_setup(REQUIRES 6.4)
 
@@ -151,6 +153,8 @@ qt_add_executable(${PROJECT_NAME}
 
 
 target_link_libraries(QVocalWriter PRIVATE Qt6::Core)
+target_link_libraries(QVocalWriter PRIVATE Qt6::Core)
+target_link_libraries(QVocalWriter PRIVATE Qt6::Core)
 set(QML_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -159,13 +163,14 @@ qt_add_qml_module(${PROJECT_NAME}
     URI ${PROJECT_NAME}
     VERSION 1.0
       QML_FILES
+          qml/ChatPane.qml
+          qml/Main.qml
           qml/RecordingLevel.qml
           qml/RecordingPane.qml
-          qml/Main.qml
       SOURCES
           include/qvw/EngineBase.h
-          include/qvw/WhisperEngine.h
           include/qvw/LlamaEngine.h
+          include/qvw/WhisperEngine.h
           include/qvw/log_wrapper.h
           src/app/AppEngine.cpp
           src/app/AppEngine.h
@@ -179,8 +184,15 @@ qt_add_qml_module(${PROJECT_NAME}
           src/app/AudioRecorder.h
           src/app/AudioRingBuffer.cpp
           src/app/AudioRingBuffer.h
+          src/app/ChatConversation.cpp
+          src/app/ChatConversation.h
+          src/app/ChatMessagesModel.cpp
+          src/app/ChatMessagesModel.h
+          src/app/GeneralModel.cpp
+          src/app/GeneralModel.h
           src/app/Model.cpp
           src/app/Model.h
+          src/app/ModelInfo.cpp
           src/app/ModelInfo.h
           src/app/ModelMgr.cpp
           src/app/ModelMgr.h
@@ -190,8 +202,6 @@ qt_add_qml_module(${PROJECT_NAME}
           src/app/Transcriber.h
           src/app/TranscriberWhisper.cpp
           src/app/TranscriberWhisper.h
-          SOURCES src/app/GeneralModel.h src/app/GeneralModel.cpp
-          QML_FILES qml/ChatPane.qml
 )
 
 # Add includepaths

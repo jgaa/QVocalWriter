@@ -102,6 +102,9 @@ public:
         return final_text_;
     }
 
+    bool resetContext();
+
+
 private:
     bool appendAndCallback(string_view piece);
     bool evalTokens(span<const llama_token> toks);
@@ -304,18 +307,7 @@ LlamaSessionCtxImpl::LlamaSessionCtxImpl(shared_ptr<LlamaCtxImpl> modelCtx)
     vocab_ = llama_model_get_vocab(model_);
     assert(vocab_);
 
-    auto cparams = llama_context_default_params();
-    cparams.n_ctx = model_ctx_->ctxSize();
-
-    // llama.cpp uses -1 as “auto” in some configs; keeping your supplied threads if >0.
-    if (model_ctx_->threads() > 0) {
-        LOG_DEBUG << "Setting llama_context n_threads* to " << model_ctx_->threads();
-        cparams.n_threads = model_ctx_->threads();
-        cparams.n_threads_batch = model_ctx_->threads();
-    }
-
-    ctx_ = llama_init_from_model(model_, cparams);
-    if (!ctx_) {
+    if (!resetContext()) {
         throw runtime_error("Failed to create llama_context");
     }
 }
@@ -362,7 +354,21 @@ bool LlamaSessionCtxImpl::evalTokens(span<const llama_token> toks) {
 
 bool LlamaSessionCtxImpl::promptImpl(string_view text, const Params & params) {
     final_text_.clear();
-    n_past_ = 0;
+
+    if (!params.continue_conversation) {
+        // Fresh start: we must reset BOTH n_past_ and KV cache.
+        // Your llama.h doesn't expose kv_cache_clear, so recreate the context.
+        if (!resetContext()) {
+            LOG_ERROR_N << "Failed to reset context for new conversation";
+            return false;
+        }
+        LOG_DEBUG_N << "Starting new conversation.";
+    } else {
+        // Continue: keep ctx_ + KV cache and DO NOT reset n_past_.
+        // The caller must provide only the "delta" (new user message + assistant header),
+        // not the whole conversation.
+        LOG_DEBUG_N << "Continuing conversation, n_past=" << n_past_;
+    }
 
     LOG_DEBUG << "Prompting Llama model with text: " << text;
 
@@ -376,7 +382,7 @@ bool LlamaSessionCtxImpl::promptImpl(string_view text, const Params & params) {
         (int32_t)text.size(),
         prompt_tokens.data(),
         (int32_t)prompt_tokens.size(),
-        /*add_special*/ true,
+        /*add_special*/ false,
         /*parse_special*/ true
         );
 
@@ -443,6 +449,32 @@ bool LlamaSessionCtxImpl::promptImpl(string_view text, const Params & params) {
     LOG_DEBUG << "Generation loop complete, total n_past=" << n_past_;
     llama_sampler_free(smpl);
 
+    return true;
+}
+
+bool LlamaSessionCtxImpl::resetContext() {
+    LOG_DEBUG_N << "Resetting llama_context for new session";
+    if (ctx_) {
+        llama_free(ctx_);
+        ctx_ = nullptr;
+    }
+
+    auto cparams = llama_context_default_params();
+    cparams.n_ctx = model_ctx_->ctxSize();
+
+    if (model_ctx_->threads() > 0) {
+        cparams.n_threads = model_ctx_->threads();
+        cparams.n_threads_batch = model_ctx_->threads();
+    }
+
+    ctx_ = llama_init_from_model(model_, cparams);
+    if (!ctx_) {
+        LOG_ERROR << "Failed to recreate llama_context";
+        return false;
+    }
+
+    n_past_ = 0;
+    last_logits_idx_ = 0;
     return true;
 }
 

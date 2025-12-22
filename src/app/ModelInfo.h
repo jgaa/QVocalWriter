@@ -1,11 +1,34 @@
 #pragma once
 
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 #include <cstdint>
 
+enum class PromptRole {
+    System,
+    User,
+    Assistant
+};
+
+struct ChatMessage {
+    PromptRole role;
+    std::string content;
+    bool completed{true}; // false during assistants partial updates
+};
+
+using messages_view_t = std::span<const ChatMessage * const>;
+
 struct ModelInfo {
+    enum class PromptStyle {
+        None,
+        Llama3,
+        ChatML,
+        Mistral,
+        Raw
+    };
+
     enum Quatization {
         Q_Unknown,
         Q4_0,
@@ -25,8 +48,12 @@ struct ModelInfo {
         Transcribe  = 1 << 3,
     };
 
+
+    std::string formatPrompt(messages_view_t messages) const;
+
     std::string_view name;
     std::string_view id;
+    PromptStyle prompt_style{PromptStyle::None};
     std::string_view filename;
     Quatization quantization{};
     size_t size_mb{};   // approximate in megabytes

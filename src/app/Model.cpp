@@ -174,7 +174,7 @@ void Model::setState(State state)
 {
     if(state_ != state) {
         LOG_DEBUG_EX(*this) << "Model state for "
-                    << config().model_name
+                    << modelName()
                     <<" changed from " << state_ << " to " << state;
         state_ = state;
         emit stateChanged();

@@ -29,38 +29,38 @@ namespace {
 using mi_t = ModelInfo;
 constexpr auto all_whisper_models = std::to_array<mi_t>({
     // Whisper
-    {"[none]", "", "", mi_t::Q_Unknown, 0, "", mi_t::Transcribe, ""},
-    {"tiny", "tiny-q5_1", "ggml-tiny-q5_1.bin", mi_t::Q5_1, 31,
+    {"[none]", "", ModelInfo::PromptStyle::None, "", mi_t::Q_Unknown, 0, "", mi_t::Transcribe, ""},
+    {"tiny", "tiny-q5_1", ModelInfo::PromptStyle::None, "ggml-tiny-q5_1.bin", mi_t::Q5_1, 31,
      "2827a03e495b1ed3048ef28a6a4620537db4ee51", mi_t::Transcribe,
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
-    {"tiny-en", "tiny.en-q5_1", "ggml-tiny.en-q5_1.bin", mi_t::Q5_1, 31,
+    {"tiny-en", "tiny.en-q5_1", ModelInfo::PromptStyle::None, "ggml-tiny.en-q5_1.bin", mi_t::Q5_1, 31,
      "3fb92ec865cbbc769f08137f22470d6b66e071b6", mi_t::Transcribe,
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
-    {"base", "base-q5_1", "ggml-base-q5_1.bin", mi_t::Q5_1, 57,
+    {"base", "base-q5_1", ModelInfo::PromptStyle::None, "ggml-base-q5_1.bin", mi_t::Q5_1, 57,
      "a3733eda680ef76256db5fc5dd9de8629e62c5e7", mi_t::Transcribe,
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
-    {"base-en", "base.en-q5_1", "ggml-base.en-q5_1.bin", mi_t::Q5_1, 57,
+    {"base-en", "base.en-q5_1", ModelInfo::PromptStyle::None, "ggml-base.en-q5_1.bin", mi_t::Q5_1, 57,
      "d26d7ce5a1b6e57bea5d0431b9c20ae49423c94a", mi_t::Transcribe,
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
-    {"small", "small-q5_1", "ggml-small-q5_1.bin", mi_t::Q5_1, 181,
+    {"small", "small-q5_1", ModelInfo::PromptStyle::None, "ggml-small-q5_1.bin", mi_t::Q5_1, 181,
      "6fe57ddcfdd1c6b07cdcc73aaf620810ce5fc771", mi_t::Transcribe,
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
-    {"small-en", "small.en-q5_1", "ggml-small.en-q5_1.bin", mi_t::Q5_1, 181,
+    {"small-en", "small.en-q5_1", ModelInfo::PromptStyle::None, "ggml-small.en-q5_1.bin", mi_t::Q5_1, 181,
      "20f54878d608f94e4a8ee3ae56016571d47cba34", mi_t::Transcribe,
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
-    {"medium", "medium-q5_0", "ggml-medium-q5_0.bin", mi_t::Q5_0, 514,
+    {"medium", "medium-q5_0", ModelInfo::PromptStyle::None, "ggml-medium-q5_0.bin", mi_t::Q5_0, 514,
      "7718d4c1ec62ca96998f058114db98236937490e", mi_t::Transcribe,
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
-    {"medium-en", "medium.en-q5_0", "ggml-medium.en-q5_0.bin", mi_t::Q5_0, 514,
+    {"medium-en", "medium.en-q5_0", ModelInfo::PromptStyle::None, "ggml-medium.en-q5_0.bin", mi_t::Q5_0, 514,
      "bb3b5281bddd61605d6fc76bc5b92d8f20284c3b", mi_t::Transcribe,
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
-    {"large", "large-v3-q5_0", "ggml-large-v3-q5_0.bin", mi_t::Q5_0, 1100,
+    {"large", "large-v3-q5_0", ModelInfo::PromptStyle::None, "ggml-large-v3-q5_0.bin", mi_t::Q5_0, 1100,
      "e6e2ed78495d403bef4b7cff42ef4aaadcfea8de", mi_t::Transcribe,
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
-    {"turbo", "large-v3-turbo-q4_0", "ggml-large-v3-turbo-q5_0.bin", mi_t::Q5_0,
+    {"turbo", "large-v3-turbo-q4_0", ModelInfo::PromptStyle::None, "ggml-large-v3-turbo-q5_0.bin", mi_t::Q5_0,
      547, "e050f7970618a659205450ad97eb95a18d69c9ee", mi_t::Transcribe,
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
-    {"turbo-best", "large-v3-turbo-q8_0", "ggml-large-v3-turbo-q5_0.bin",
+    {"turbo-best", "large-v3-turbo-q8_0", ModelInfo::PromptStyle::None, "ggml-large-v3-turbo-q5_0.bin",
      mi_t::Q8_0, 547, "e050f7970618a659205450ad97eb95a18d69c9ee",
      mi_t::Transcribe,
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
@@ -71,6 +71,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
     {
         "lite",                                    // user-facing name
         "qwen2.5-3b-instruct-q4_k_m",
+        ModelInfo::PromptStyle::ChatML,
         "Qwen2.5-3B-Instruct-Q4_K_M.gguf",
         mi_t::Q4_0,                                // map K-quants into your buckets as you prefer
         1930,
@@ -83,6 +84,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
     {
         "balanced",
         "llama3.1-8b-instruct-q4_k_m",
+        ModelInfo::PromptStyle::Llama3,
         "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
         mi_t::Q4_0,
         4920,
@@ -93,6 +95,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
     {
         "balanced-translate",
         "qwen2.5-7b-instruct-q4_k_m",
+        ModelInfo::PromptStyle::ChatML,
         "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
         mi_t::Q4_0,
         4200,
@@ -105,6 +108,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
     {
         "pro",
         "mistral-small-instruct-2409-q4_k_m",
+        ModelInfo::PromptStyle::Mistral,
         "Mistral-Small-Instruct-2409-Q4_K_M.gguf",
         mi_t::Q4_0,
         13340,
@@ -115,6 +119,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
     {
         "pro-translate",
         "qwen2.5-14b-instruct-q4_k_m",
+        ModelInfo::PromptStyle::ChatML,
         "Qwen2.5-14B-Instruct-Q4_K_M.gguf",
         mi_t::Q4_0,
         8990,
@@ -127,6 +132,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
     {
         "workstation",
         "llama3.1-70b-instruct-q4_k_m",
+        ModelInfo::PromptStyle::Llama3,
         "Meta-Llama-3.1-70B-Instruct-Q4_K_M.gguf",
         mi_t::Q4_0,
         42520,
@@ -137,6 +143,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
     {
         "workstation-translate",
         "qwen2.5-32b-instruct-q4_k_m",
+        ModelInfo::PromptStyle::ChatML,
         "Qwen2.5-32B-Instruct-Q4_K_M.gguf",
         mi_t::Q4_0,
         19850,
@@ -150,6 +157,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
     {
         "extreme",
         "llama3.1-70b-instruct-q5_k_s",
+        ModelInfo::PromptStyle::Llama3,
         "Meta-Llama-3.1-70B-Instruct-Q5_K_S.gguf",
         mi_t::Q5_1,
         48660,
@@ -160,6 +168,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
     {
         "extreme-translate",
         "qwen2.5-72b-instruct-q4_k_m",
+        ModelInfo::PromptStyle::ChatML,
         "Qwen2.5-72B-Instruct-Q4_K_M.gguf",
         mi_t::Q4_0,
         47420,
@@ -168,16 +177,41 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         "https://huggingface.co/bartowski/Qwen2.5-72B-Instruct-GGUF/resolve/main/"
     },
 
-    // ---- Optional “heavy MoE” (good writing/chat; not primarily translation) ----
+    //  “heavy MoE” (good writing/chat; not primarily translation) ----
     {
         "heavy-moe",
         "mixtral-8x7b-instruct-v0.1-q4_k_m",
+        ModelInfo::PromptStyle::Mistral,
         "mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf",
         mi_t::Q4_0,
         26400,
         "",
         mi_t::Chat | mi_t::Rewrite,
         "https://huggingface.co/TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF/resolve/main/"
+    },
+
+    {
+        "heavy-moe-deepseek",
+        "mixtral-8x7b-instruct-v0.1-deepseek-q4_k_m",
+        ModelInfo::PromptStyle::Mistral,
+        "mixtral-8x7b-instruct-v0.1-deepseek.Q4_K_M.gguf",
+        mi_t::Q4_0,
+        26400,
+        "",
+        mi_t::Chat | mi_t::Rewrite,
+        "https://huggingface.co/deepseekr/Mixtral-8x7B-Instruct-v0.1-Deepseek-GGUF/resolve/main/"
+    },
+
+    {
+        "heavy-moe-uncensored",
+        "mixtral-8x7b-instruct-v0.1-uncensored-q4_k_m",
+        ModelInfo::PromptStyle::Mistral,
+        "mixtral-8x7b-instruct-v0.1-uncensored.Q4_K_M.gguf",
+        mi_t::Q4_0,
+        26400,
+        "",
+        mi_t::Chat | mi_t::Rewrite,
+        "https://huggingface.co/bartowski/Mixtral-8x7B-Instruct-v0.1-Uncensored-GGUF/resolve/main/"
     }
 });
 

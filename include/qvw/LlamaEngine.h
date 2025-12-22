@@ -33,7 +33,7 @@ public:
         int   top_k{40};
         float top_p{0.95f};
         float repeat_penalty{1.1f};
-
+        bool  continue_conversation{false};
         std::vector<std::string> stop;
 
         // -------------------------
@@ -80,36 +80,39 @@ public:
         }
 
         /// General chat / assistant (slightly more creative)
-        static Params Chat(int maxTokens = 256) {
+        static Params Chat(bool continueConversation = false, int maxTokens = 1024 * 8) {
             Params p;
             p.max_tokens     = maxTokens;
             p.temperature    = 0.7f;
             p.top_k          = 40;
             p.top_p          = 0.95f;
             p.repeat_penalty = 1.1f;
+            p.continue_conversation = continueConversation;
             return p;
         }
 
         /// Creative writing (blog posts, stories, brainstorming)
-        static Params Creative(int maxTokens = 512) {
+        static Params Creative(bool continueConversation, int maxTokens = 1024 * 16) {
             Params p;
             p.max_tokens     = maxTokens;
             p.temperature    = 1.0f;
             p.top_k          = 100;
             p.top_p          = 0.98f;
             p.repeat_penalty = 1.05f;
+            p.continue_conversation = continueConversation;
             return p;
         }
 
         /// Very strict / near-greedy decoding
         /// Useful for testing or reproducibility
-        static Params Greedy(int maxTokens = 256) {
+        static Params Greedy(bool continueConversation = false, int maxTokens = 256) {
             Params p;
             p.max_tokens     = maxTokens;
             p.temperature    = 0.0f;
             p.top_k          = 1;
             p.top_p          = 1.0f;
             p.repeat_penalty = 1.0f;
+            p.continue_conversation = continueConversation;
             return p;
         }
     };

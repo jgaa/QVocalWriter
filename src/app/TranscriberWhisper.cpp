@@ -86,7 +86,7 @@ TranscriberWhisper::TranscriberWhisper(std::string name, std::unique_ptr<Config>
     : Transcriber(std::move(name), std::move(cfg), queue, filePath, format)
 {
     LOG_TRACE_EX(*this) << "TranscriberWhisper: constructor called for model "
-                << config().model_name
+                << modelName()
                 << " with language '" << language() << "'";
 }
 

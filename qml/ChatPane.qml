@@ -11,43 +11,31 @@ Item {
 
     // local UI state
     property string selectedModelName: modelCombo.currentText
-    property int streamingAssistantIndex: -1
+    property string lastChatError: ""
 
-    function appendUserMessage(text) {
-        chatModel.append({ sender: "user", text: text })
-        chatView.positionViewAtEnd()
-    }
-
-    function beginAssistantMessage() {
-        chatModel.append({ sender: "assistant", text: "" })
-        streamingAssistantIndex = chatModel.count - 1
-        chatView.positionViewAtEnd()
-    }
-
-    function updateAssistantPartial(text) {
-        if (streamingAssistantIndex < 0 || streamingAssistantIndex >= chatModel.count)
-            beginAssistantMessage()
-        chatModel.setProperty(streamingAssistantIndex, "text", text)
-        chatView.positionViewAtEnd()
-    }
-
-    function finalizeAssistant(text) {
-        // If final arrives without any partials, still create a message.
-        if (streamingAssistantIndex < 0 || streamingAssistantIndex >= chatModel.count)
-            beginAssistantMessage()
-        chatModel.setProperty(streamingAssistantIndex, "text", text)
-        streamingAssistantIndex = -1
-        chatView.positionViewAtEnd()
+    function isUserActor(actor) {
+        if (actor === undefined || actor === null)
+            return false
+        if (typeof actor === "string")
+            return actor.toLowerCase() === "user" || actor.toLowerCase() === "human"
+        if (typeof actor === "number")
+            return actor === 0 // common convention: 0 = user
+        return false
     }
 
     function clearChat() {
-        chatModel.clear()
-        streamingAssistantIndex = -1
+        root.lastChatError = ""
+        // Starts a fresh conversation in C++ (clears the message list there)
+        appEngine.startChatConversation("default")
     }
 
     ColumnLayout {
         id: column
-        anchors.fill: parent
+        anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.top: errorLabel.visible ? errorLabel.bottom : parent.top
+                anchors.topMargin: errorLabel.visible ? 8 : 0
         spacing: 10
 
         // --- Model selection + Prepare ---
@@ -77,7 +65,7 @@ Item {
 
                     Button {
                         text: qsTr("Clear")
-                        enabled: chatModel.count > 0 && !appEngine.isBusy
+                        enabled: chatView.count > 0 && !appEngine.isBusy
                         onClicked: clearChat()
                     }
                 }
@@ -125,54 +113,78 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             padding: 8
-
-            ListModel { id: chatModel }
+            Label {
+                id: errorLabel
+                visible: root.lastChatError.length > 0
+                text: qsTr("Error: ") + root.lastChatError
+                wrapMode: Text.WordWrap
+                color: palette.brightText
+                background: Rectangle { color: palette.mid; radius: 6; opacity: 0.9 }
+                padding: 8
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+            }
 
             ListView {
                 id: chatView
                 anchors.fill: parent
                 clip: true
                 spacing: 10
-                model: chatModel
+                model: appEngine.chatMessages
 
-                delegate: Item {
+                delegate: ColumnLayout {
                     width: chatView.width
-                    implicitHeight: bubble.implicitHeight
+                    //implicitHeight: bubble.implicitHeight
+                    required property string actor
+                    required property string message
+                    required property bool completed
+                    required property bool isUser
+                    required property bool isAssistant
 
-                    Rectangle {
-                        id: bubble
-                        width: Math.min(chatView.width * 0.92, textItem.implicitWidth + 28)
-                        x: sender === "user" ? chatView.width - width : 0
-                        radius: 10
-                        opacity: 0.95
-                        border.width: 1
+                    // Rectangle {
+                    //     id: bubble
+                    //     width: Math.min(chatView.width * 0.92, textItem.implicitWidth + 28)
+                    //     x: isUser ? chatView.width - width : 0
+                    //     radius: 10
+                    //     opacity: 0.95
+                    //     border.width: 1
 
-                        // Don’t hardcode colors; keep it theme-friendly
-                        color: sender === "user" ? palette.base : palette.alternateBase
-                        border.color: palette.mid
+                    //     // Don’t hardcode colors; keep it theme-friendly
+                    //     color: isUser ? palette.base : palette.alternateBase
+                    //     border.color: palette.mid
 
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 12
+                    //    ColumnLayout {
+                            //anchors.fill: parent
+                            //anchors.margins: 12
                             spacing: 6
 
                             Label {
-                                text: sender === "user" ? qsTr("You") : qsTr("Assistant")
+                                text: actor
                                 font.bold: true
                                 opacity: 0.8
                             }
 
                             TextArea {
                                 id: textItem
-                                text: model.text
+                                text: message
                                 readOnly: true
                                 wrapMode: TextEdit.Wrap
                                 selectByMouse: true
                                 background: null
                                 Layout.fillWidth: true
                             }
-                        }
-                    }
+
+
+                            BusyIndicator {
+                                running: !isUser && !completed
+                                visible: running
+                                width: 18
+                                height: 18
+                                opacity: 0.6
+                            }
+                        //}
+                    //}
                 }
             }
         }
@@ -205,13 +217,6 @@ Item {
                     Layout.fillWidth: true
                     spacing: 8
 
-                    Label {
-                        text: appEngine.stateText
-                        Layout.fillWidth: true
-                        elide: Label.ElideRight
-                        opacity: 0.85
-                    }
-
                     BusyIndicator {
                         running: appEngine.isBusy
                         visible: running
@@ -227,9 +232,7 @@ Item {
                             if (!p.length)
                                 return
 
-                            appendUserMessage(p)
-                            beginAssistantMessage()
-
+                            root.lastChatError = ""
                             promptEdit.text = ""
                             appEngine.chatPrompt(p)
                         }
@@ -238,24 +241,23 @@ Item {
             }
         }
 
-        // --- Stream + final text wiring ---
+        // --- Keep view pinned to bottom when the C++ model updates ---
+        Connections {
+            target: appEngine.chatMessages
+            ignoreUnknownSignals: true
+
+            function onRowsInserted(parent, first, last) { chatView.positionViewAtEnd() }
+            function onDataChanged(topLeft, bottomRight, roles) { chatView.positionViewAtEnd() }
+            function onModelReset() { chatView.positionViewAtEnd() }
+        }
+
+        // Optional: surface errors from AppEngine without mutating the chat model in QML
         Connections {
             target: appEngine
             ignoreUnknownSignals: true
 
-            function onPartialTextAvailable(text) {
-                updateAssistantPartial(text)
-            }
-
-            // If your C++ exposes this signal, we use it; otherwise it’s ignored.
-            function onFinalTextAvailable(text) {
-                finalizeAssistant(text)
-            }
-
             function onErrorOccurred(message) {
-                chatModel.append({ sender: "assistant", text: qsTr("Error: ") + message })
-                streamingAssistantIndex = -1
-                chatView.positionViewAtEnd()
+                root.lastChatError = message
             }
         }
     }

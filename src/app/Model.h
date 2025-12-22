@@ -18,7 +18,7 @@
 
 #include "Queue.h"
 #include "ModelMgr.h"
-
+#include "ModelInfo.h"
 
 /*! Base-class for model handling
  *
@@ -38,7 +38,7 @@ class Model : public QObject
 
 public:
     struct Config {
-        std::string model_name;
+        ModelInfo model_info;
         std::string from_language;
         bool submit_filal_text{true};
     };
@@ -145,6 +145,14 @@ public:
 
     const auto& worker() const noexcept {
         return worker_;
+    }
+
+    const ModelInfo& modelInfo() const noexcept {
+        return config().model_info;
+    }
+
+    std::string_view modelName() const noexcept {
+        return config().model_info.name;
     }
 
 protected:

@@ -7,6 +7,8 @@
 
 #include "AudioController.h"
 #include "Queue.h"
+#include "ModelInfo.h"
+#include "ChatMessagesModel.h"
 
 class AudioRecorder;
 class AudioFileWriter;
@@ -14,6 +16,7 @@ class Transcriber;         // base class
 class TranscriberWhisper;  // concrete class
 class ModelMgr;
 class GeneralModel;
+class ChatConversation;
 
 class AppEngine : public QObject
 {
@@ -40,6 +43,7 @@ class AppEngine : public QObject
     Q_PROPERTY(const QStringList& michrophones READ microphones() NOTIFY microphonesChanged)
     Q_PROPERTY(int currentMic READ currentMic WRITE setCurrentMic NOTIFY currentMicChanged)
     Q_PROPERTY(const QString& stateText MEMBER state_text_ NOTIFY stateTextChanged)
+    Q_PROPERTY(ChatMessagesModel* chatMessages READ chatMessages CONSTANT)
 
 public:
     enum class State {
@@ -69,6 +73,7 @@ public:
     Q_INVOKABLE void chatPrompt(const QString& prompt);
     Q_INVOKABLE void saveTranscriptToFile(const QUrl &path);
     Q_INVOKABLE void reset();
+    Q_INVOKABLE void startChatConversation(const QString& name);
 
     AppEngine();
 
@@ -90,6 +95,7 @@ public:
     QString transcribePostModelName() const { return transcribe_post_model_name_;}
     QString chatModelName() const;
     void setChatModelName(const QString& name);
+    std::string getChatSystemPrompt() const;
 
     int modelIndex(const QString& name) const;
 
@@ -107,6 +113,8 @@ public:
                 return true;
         return false;
     }
+
+    ChatMessagesModel* chatMessages() { return &chat_messages_model_; }
 
 signals:
     void stateChanged(AppEngine::State newState);
@@ -134,13 +142,13 @@ private:
     QCoro::Task<void> startPrepareForChat(QString modelName);
     QCoro::Task<bool> prepareTranscriberModels();
     QCoro::Task<std::shared_ptr<Transcriber>> prepareTranscriber(std::string name,
-                                                           std::string_view modelId,
+                                                           ModelInfo modelInfo,
                                                            std::string_view language,
                                                            bool loadModel,
                                                            bool submitFilalText);
 
     QCoro::Task<std::shared_ptr<GeneralModel>> prepareGeneralModel(std::string name,
-                                                                 std::string_view modelId,
+                                                                 ModelInfo modelInfo,
                                                                  bool loadModel);
     void onFinalRecordingTextAvailable(const QString &text);
     QCoro::Task<void> transcribeChunks();
@@ -151,6 +159,8 @@ private:
     void prepareLanguages();
     QCoro::Task<bool> sendChatPrompt(const QString& prompt);
 
+    ChatMessagesModel chat_messages_model_;
+    std::shared_ptr<ChatConversation> chat_conversation_; // the current conversation
     AudioController audio_controller_;
     State state_{State::Idle};
     QStringList languages_;

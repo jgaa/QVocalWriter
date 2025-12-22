@@ -26,11 +26,10 @@ GeneralModel::~GeneralModel()
     LOG_DEBUG_EX(*this) << "Destroying instance";
 }
 
-QCoro::Task<bool> GeneralModel::prompt(const QString &text, const qvw::LlamaSessionCtx::Params& params)
+QCoro::Task<bool> GeneralModel::prompt(std::string text, const qvw::LlamaSessionCtx::Params& params)
 {
-    string prompt_text = text.toStdString();
-    auto op = make_unique<Model::Operation>([this, prompt_text, params]() -> bool {
-        LOG_DEBUG_EX(*this) << "Prompting GeneralModel with text: " << prompt_text;
+    auto op = make_unique<Model::Operation>([this, text=std::move(text), params]() -> bool {
+        LOG_DEBUG_EX(*this) << "Prompting GeneralModel with text: " << text;
 
         assert(session_ctx_ != nullptr);
         if (!session_ctx_) {
@@ -40,12 +39,12 @@ QCoro::Task<bool> GeneralModel::prompt(const QString &text, const qvw::LlamaSess
         final_text_.clear();
 
         session_ctx_->setOnPartialTextCallback([this](const std::string &partial_text) {
-            LOG_DEBUG_EX(*this) << "Received partial text: " << partial_text;
+            LOG_TRACE_EX(*this) << "Received partial text: " << partial_text;
             partialTextAvailable(QString::fromStdString(partial_text));
         });
 
         ScopedTimer timer;
-        const bool result = session_ctx_->prompt(prompt_text, params);
+        const bool result = session_ctx_->prompt(text, params);
 
         LOG_INFO_EX(*this) << "Prompt completed in "
                            << timer.elapsed() << " seconds.";
@@ -56,12 +55,14 @@ QCoro::Task<bool> GeneralModel::prompt(const QString &text, const qvw::LlamaSess
 
     auto future = op->future();
 
-    LOG_TRACE_EX(*this) << "Enqueuing prompt: " << prompt_text;
+    LOG_TRACE_EX(*this) << "Enqueuing prompt: " << text;
     enqueueCommand(std::move(op));
     const auto result = co_await future;
     LOG_TRACE_EX(*this) << "TranscribeRecording command completed.";
-    final_text_ = QString::fromStdString(session_ctx_->getFullTextResult());
-    emit finalTextAvailable(final_text_);
+    final_text_ = session_ctx_->getFullTextResult();
+    const auto qtext = QString::fromStdString(final_text_);
+    emit partialTextAvailable(qtext);
+    emit finalTextAvailable(qtext);
     co_return result;
 }
 

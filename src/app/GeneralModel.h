@@ -15,7 +15,11 @@ public:
         return ModelKind::GENERAL;
     }
 
-    QCoro::Task<bool> prompt(const QString& text, const qvw::LlamaSessionCtx::Params& params);
+    QCoro::Task<bool> prompt(std::string text, const qvw::LlamaSessionCtx::Params& params);
+
+    const std::string& finalText() const noexcept {
+        return final_text_;
+    }
 
 protected:
     bool createContextImpl() override;
@@ -24,5 +28,5 @@ protected:
 private:
     std::shared_ptr<qvw::LlamaSessionCtx> session_ctx_;
     std::unique_ptr<Config> config_;
-    QString final_text_;
+    std::string final_text_;
 };

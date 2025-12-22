@@ -16,6 +16,7 @@
 #include "TranscriberWhisper.h"
 #include "AudioCaptureDevice.h"
 #include "GeneralModel.h"
+#include "ChatConversation.h"
 
 #include "logging.h"
 
@@ -137,10 +138,32 @@ QCoro::Task<bool> AppEngine::sendChatPrompt(const QString &prompt)
         co_return false;
     }
 
-    LOG_INFO_N << "Sending chat prompt: " << prompt.toStdString();
+    LOG_INFO_N << "Sending chat prompt: " << prompt;
+
+    // TODO: Compress conversation history summaries if we run out of tokens for the model
+
+    if (!chat_conversation_) {
+        startChatConversation(tr("Unnamed"));
+    }
+
+    auto current_conversation = chat_conversation_;
+
+    assert(current_conversation);
+    current_conversation->addMessage(make_shared<ChatMessage>(PromptRole::User, prompt.toStdString()));
+    auto formatted_prompt = chat_model_->modelInfo().formatPrompt(chat_conversation_->getLastMessageAsView()); //getMessages());
 
     setState(State::Processing);
-    auto result = co_await chat_model_->prompt(prompt, qvw::LlamaSessionCtx::Params::Chat());
+
+    // TODO: Handle replay of the full conversation if we resumed an existing one from storage.
+    // Conversation continuation is handled by the model context params.
+    auto result = co_await chat_model_->prompt(std::move(formatted_prompt),
+                                               qvw::LlamaSessionCtx::Params::Chat(true));
+    assert(current_conversation);
+
+    // TODO: Handle final update after partial updates
+    // (we just change the text of the last message (agent message for partial updates) and set the completed flag to true).
+    current_conversation->addMessage(make_shared<ChatMessage>(PromptRole::Assistant,
+                                                          chat_model_->finalText()));
     setState(State::Ready);
     co_return result;
 }
@@ -160,6 +183,14 @@ void AppEngine::saveTranscriptToFile(const QUrl &path)
 void AppEngine::reset()
 {
     doReset();
+}
+
+void AppEngine::startChatConversation(const QString &name)
+{
+    LOG_INFO_N << "Starting chat conversation: " << name.toStdString();
+    chat_conversation_ = make_shared<ChatConversation>(name);
+    chat_conversation_->setModel(&chat_messages_model_);
+    chat_conversation_->addMessage(make_shared<ChatMessage>(PromptRole::System, getChatSystemPrompt()));
 }
 
 AppEngine::AppEngine() {
@@ -394,6 +425,34 @@ void AppEngine::setChatModelName(const QString &name)
     }
 }
 
+string AppEngine::getChatSystemPrompt() const
+{
+    constexpr string_view default_prompt = R"(You are a helpful assistant.
+
+Goals:
+- Be polite, professional, and direct.
+- Prefer correctness over speed.
+- If the user’s request is ambiguous or missing key details, ask a clarifying question before answering.
+- If you must proceed with incomplete information, state your assumptions explicitly and keep them minimal.
+
+Behavior:
+- Do not invent facts. If you are unsure, say so and suggest how to verify.
+- When the user asks for an opinion or recommendation, explain the tradeoffs briefly.
+- Do not be overly agreeable: push back on incorrect premises and unsafe or unreasonable requests.
+
+Output:
+- Respond in Markdown.
+- Use short sections and bullet points when helpful.
+- Avoid unnecessary preambles and avoid signatures.
+
+Reasoning:
+- Provide a brief explanation of your reasoning when it helps the user.
+- Do not include hidden chain-of-thought; instead, show assumptions, key steps, and conclusions.
+- When generating code, include comments explaining non-trivial parts.)";
+
+    return string{default_prompt};
+}
+
 
 void AppEngine::setState(State newState)
 {    
@@ -462,7 +521,7 @@ QCoro::Task<void> AppEngine::startPrepareForChat(QString name)
     assert(mi);
     chat_model_ = co_await prepareGeneralModel(
         "chat-model",
-        std::string{mi->id},
+        *mi,
         true // Load it
         );
 
@@ -486,7 +545,7 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
             const auto model_id = model->id;
             if (rec_transcriber_ = co_await prepareTranscriber(
                     "live-transcriber"s,
-                    model_id,
+                    *model,
                     language.whisper_language,
                     true, // Load the live transcriber so it reacts faster when we start recording
                     transcribe_post_model_name_.isEmpty() // Submit final text?
@@ -510,7 +569,7 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
             const auto model_id = model->id;
             if (post_transcriber_ = co_await prepareTranscriber(
                     "post--transcriber"s,
-                    model_id,
+                    *model,
                     language.whisper_language,
                     true, // Load the live transcriber so it reacts faster when we start recording
                     true // Submit final text?
@@ -529,10 +588,11 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
 }
 
 QCoro::Task<std::shared_ptr<GeneralModel> > AppEngine::prepareGeneralModel(
-    std::string name, std::string_view modelId, bool loadModel)
+    std::string name, ModelInfo modelInfo, bool loadModel)
 {
+    const QString model_id = QString::fromUtf8(modelInfo.id);
     auto params = make_unique<Model::Config>();
-    params->model_name = modelId;
+    params->model_info = std::move(modelInfo);
     params->submit_filal_text = true;
     shared_ptr<GeneralModel> model = make_shared<GeneralModel>(name, std::move(params));
 
@@ -546,7 +606,7 @@ QCoro::Task<std::shared_ptr<GeneralModel> > AppEngine::prepareGeneralModel(
         }
     );
 
-    co_await model->init(QString::fromUtf8(modelId));
+    co_await model->init(model_id);
 
     if (loadModel) {
         co_await model->loadModel();
@@ -556,11 +616,12 @@ QCoro::Task<std::shared_ptr<GeneralModel> > AppEngine::prepareGeneralModel(
 }
 
 QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareTranscriber(
-    std::string name, string_view modelId, string_view language,
+    std::string name, ModelInfo modelInfo, string_view language,
     bool loadModel, bool submitFilalText)
 {
+    const QString model_id = QString::fromUtf8(modelInfo.id);
     auto cfg = make_unique<Transcriber::Config>();
-    cfg->model_name = modelId;
+    cfg->model_info = modelInfo;
     cfg->from_language = language;
     cfg->submit_filal_text = submitFilalText;
 
@@ -601,7 +662,7 @@ QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareTranscriber(
     }
 
 
-    co_await transcriber->init(QString::fromUtf8(modelId));
+    co_await transcriber->init(model_id);
 
     if (loadModel) {
         co_await transcriber->loadModel();
