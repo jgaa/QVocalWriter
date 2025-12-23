@@ -1,10 +1,10 @@
 # QVocalWriter
 
 **QVocalWriter** is a cross-platform, local-first application for working with spoken and written language.
-It started as a speech-to-text tool for long-form writing, and has grown into a modular 
+It started as a speech-to-text tool for long-form writing and has grown into a modular
 toolset with independent features for **transcription**, **translation**, and **assistant-based chat**.
 
-The project is under active initial development, with an emphasis on clean C++ APIs, QML-based UI, 
+The project is under active initial development, with an emphasis on clean C++ APIs, a QML-based UI,
 and extensibility across platforms.
 
 The focus remains on:
@@ -25,9 +25,10 @@ The focus remains on:
   Translate text or transcriptions between languages using local models.
 
 * **Assistant Chat**
-  Interact with a local language model for drafting, rewriting, summarizing, or refining text, research and experimenting or playing with local models of various sizes and capabilities.
+  Interact with a local language model for drafting, rewriting, summarizing, or refining text,
+  as well as researching, experimenting, or playing with local models of various sizes and capabilities.
 
-Each feature is designed to work independently, sharing models and infrastructure where 
+Each feature is designed to work independently, sharing models and infrastructure where
 it makes sense, but without tight coupling.
 
 ## Building
