@@ -61,6 +61,7 @@ FetchContent_Declare(
 # set(WHISPER_BUILD_SERVER   OFF CACHE BOOL "" FORCE)
 
 # QCoro (coroutines for Qt5/Qt6)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
   qcoro
   GIT_REPOSITORY https://github.com/qcoro/qcoro.git
