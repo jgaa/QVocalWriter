@@ -335,7 +335,9 @@ qvw::WhisperEngine &ModelMgr::whisperEngine() {
             throw std::runtime_error{"Failed to create Whisper engine instance."};
         }
 
-        whisper_engine_->setLogger(logfault_fwd::forward_to_logfault);
+        whisper_engine_->setLogger(logfault_fwd::forward_to_logfault,
+                                   static_cast<logfault_fwd::Level>(
+                                       ::logfault::LogManager::Instance().GetLoglevel()));
     }
 
     assert(whisper_engine_);
@@ -351,11 +353,19 @@ qvw::LlamaEngine &ModelMgr::llamaEngine()
             throw std::runtime_error{"Failed to create Llama engine instance."};
         }
 
-        llama_engine_->setLogger(logfault_fwd::forward_to_logfault);
+        llama_engine_->setLogger(logfault_fwd::forward_to_logfault,
+                                 static_cast<logfault_fwd::Level>(
+                                     ::logfault::LogManager::Instance().GetLoglevel()));
     }
 
     assert(llama_engine_);
     return *llama_engine_;
+}
+
+bool ModelMgr::isDownloaded(ModelKind kind, const ModelInfo &mi) const
+{
+    const auto model_path = findModelPath(kind, mi);
+    return filesystem::exists(model_path);
 }
 
 QCoro::Task<bool> ModelMgr::makeAvailable(ModelKind kind, const ModelInfo &modelInfo) noexcept
@@ -418,6 +428,7 @@ QCoro::Task<bool> ModelMgr::downloadModel(ModelKind kind, const ModelInfo &model
     }
 
     LOG_INFO_N << "Model file downloaded successfully: " << fullPath;
+    emit modelDownloaded(kind, string{modelInfo.id});
     co_return true;
 }
 
@@ -459,7 +470,10 @@ QCoro::Task<bool> ModelMgr::downloadFile(const QString& name,
     QObject::connect(reply, &QNetworkReply::downloadProgress,
                      [this, url, name](qint64 bytesReceived, qint64 bytesTotal){
 
-        emit downloadProgress(name, bytesReceived, bytesTotal);
+        if (bytesTotal > 0) {
+            const double ratio = static_cast<double>(bytesReceived) / static_cast<double>(bytesTotal);
+            emit downloadProgressRatio(name, ratio);
+        }
     });
 
     // Our “any-of-these-signals” proxy
@@ -483,6 +497,7 @@ QCoro::Task<bool> ModelMgr::downloadFile(const QString& name,
 
     // Main loop: wait for *any* event, act based on what happened
     while (true) {
+        //LOG_TRACE_N << "Waiting for download events...";
         // First drain whatever we already have
         drainToFile(reply);
         if (writeError) {
@@ -719,4 +734,41 @@ bool ModelInstance::loadLlama()
                 << timer.elapsed() << " seconds from path: " << full_path_;
     emit modelReady();
     return true;
+}
+
+ReplyEventProxy::ReplyEventProxy(QNetworkReply *reply, QObject *parent)
+    : QObject(parent)
+{
+    // readyRead
+    connect(reply, &QNetworkReply::readyRead,
+            this, [this] {
+                //LOG_TRACE_N << "ReplyEventProxy: readyRead signaled.";
+                emit event(Event::ReadyRead);
+            });
+
+    // finished
+    connect(reply, &QNetworkReply::finished,
+            this, [this] {
+                LOG_TRACE_N << "ReplyEventProxy: finished signaled.";
+                emit event(Event::Finished);
+            });
+
+    // errorOccurred (Qt 5/6 name is errorOccurred; if you're on Qt5 < 5.15, adjust)
+    connect(reply, &QNetworkReply::errorOccurred,
+            this, [this](QNetworkReply::NetworkError) {
+                LOG_TRACE_N << "ReplyEventProxy: errorOccurred signaled.";
+                emit event(Event::Error);
+            });
+
+    connect(reply, &QNetworkReply::destroyed,
+            this, [this] {
+                LOG_TRACE_N << "ReplyEventProxy: reply destroyed, cleaning up.";
+                this->deleteLater();
+            });
+
+    connect(reply, &QNetworkReply::aboutToClose,
+            this, [this] {
+                LOG_TRACE_N << "ReplyEventProxy: reply about to close, cleaning up.";
+                this->deleteLater();
+            });
 }

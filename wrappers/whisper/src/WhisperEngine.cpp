@@ -217,8 +217,9 @@ public:
         --num_loaded_models_;
     }
 
-    void setLogger(logfault_fwd::logfault_callback_t cb) override {
+    void setLogger(logfault_fwd::logfault_callback_t cb, logfault_fwd::Level level) override {
         logfault_fwd::setCallback(std::move(cb), "[whisper]");
+        logfault_fwd::setLevel(level);
     }
 
 private:

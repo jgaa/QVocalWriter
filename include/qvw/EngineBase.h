@@ -137,7 +137,7 @@ public:
 
     virtual int numLoadedModels() const noexcept = 0;
 
-    virtual void setLogger(logfault_fwd::logfault_callback_t cb) = 0;
+    virtual void setLogger(logfault_fwd::logfault_callback_t cb, logfault_fwd::Level level) = 0;
 
     /*! Determines the optimal number of threads to use based on hardware concurrency.
      *

@@ -38,11 +38,6 @@ QCoro::Task<bool> GeneralModel::prompt(std::string text, const qvw::LlamaSession
 
         final_text_.clear();
 
-        session_ctx_->setOnPartialTextCallback([this](const std::string &partial_text) {
-            LOG_TRACE_EX(*this) << "Received partial text: " << partial_text;
-            partialTextAvailable(QString::fromStdString(partial_text));
-        });
-
         ScopedTimer timer;
         const bool result = session_ctx_->prompt(text, params);
 
@@ -83,6 +78,11 @@ bool GeneralModel::createContextImpl()
     if (!session_ctx_) {
         return failed("Failed to create Llama session context in createContextImpl");
     }
+
+    session_ctx_->setOnPartialTextCallback([this](const std::string &partial_text) {
+        LOG_TRACE_EX(*this) << "Received partial text: " << partial_text;
+        emit partialTextAvailable(QString::fromStdString(partial_text));
+    });
 
     return true;
 }

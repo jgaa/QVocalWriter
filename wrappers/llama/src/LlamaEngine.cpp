@@ -65,6 +65,39 @@ static std::string tokenToPiece(const llama_vocab * vocab, llama_token tok) {
     return out;
 }
 
+static std::string_view tailView(string_view s, size_t max_tail = 32) {
+    const size_t n = s.size();
+    const size_t start = (n > max_tail) ? (n - max_tail) : 0;
+    return std::string_view{s}.substr(start);
+}
+
+bool shouldFlushNow(std::string_view last_piece, string_view buffer) {
+    // If the new piece contains paragraph breaks, flush immediately
+    if (last_piece.find("\n\n") != std::string_view::npos) return true;
+
+    const auto tail = tailView(buffer, 32);
+
+    // Paragraph at end
+    if (tail.size() >= 2 && tail.ends_with("\n\n")) return true;
+
+    // Code fence boundary at end
+    if (tail.size() >= 3 && tail.ends_with("```")) return true;
+
+    // Sentence endings (allow space or newline)
+    if (tail.size() >= 2) {
+        const char a = tail[tail.size() - 2];
+        const char b = tail[tail.size() - 1];
+        if ((a == '.' || a == '!' || a == '?') && (b == ' ' || b == '\n')) return true;
+    }
+
+    // Ellipsis (unicode) cases if you care:
+    if (tail.ends_with("… ") ||  tail.ends_with("…\n")) {
+        return true;
+    }
+
+    return false;
+}
+
 
 class LlamaImpl;
 class LlamaCtxImpl;
@@ -119,6 +152,7 @@ private:
     int32_t last_logits_idx_ = 0;
 
     string final_text_;
+    string partial_text_;
     function<void(const string&)> on_partial_text_callback_;
 };
 
@@ -257,8 +291,9 @@ public:
         --num_loaded_models_;
     }
 
-    void setLogger(logfault_fwd::logfault_callback_t cb) override {
+    void setLogger(logfault_fwd::logfault_callback_t cb, logfault_fwd::Level level) override {
         logfault_fwd::setCallback(std::move(cb), "LlamaEngine");
+        logfault_fwd::setLevel(level);
     }
 
 private:
@@ -315,7 +350,10 @@ LlamaSessionCtxImpl::LlamaSessionCtxImpl(shared_ptr<LlamaCtxImpl> modelCtx)
 bool LlamaSessionCtxImpl::appendAndCallback(string_view piece) {
     final_text_.append(piece);
     if (on_partial_text_callback_) {
-        on_partial_text_callback_(final_text_);
+        if (shouldFlushNow(piece, final_text_)) {
+            LOG_TRACE << "Flushing partial text callback, final_text_=\"" << final_text_ << "\"";
+            on_partial_text_callback_(final_text_);
+        }
     }
     return true;
 }
@@ -437,10 +475,7 @@ bool LlamaSessionCtxImpl::promptImpl(string_view text, const Params & params) {
 
         const auto piece = tokenToPiece(vocab, id);
         LOG_TRACE << "Sampled token id=" << id << " piece=\"" << piece << "\"";
-        final_text_ += piece;
-        if (on_partial_text_callback_) {
-            on_partial_text_callback_(piece);   // emit the *piece*, not the whole final_text_
-        }
+        appendAndCallback(piece);
 
         const llama_token toks[1] = { id };
         if (!evalTokens(std::span{toks, 1})) break;

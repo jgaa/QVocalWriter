@@ -22,10 +22,6 @@
  - stateChanged(): Emitted when the state of the manager changes.
 */
 
-enum class ModelKind {
-    WHISPER,
-    GENERAL
-};
 
 namespace qvw {
 class WhisperEngine;
@@ -103,27 +99,7 @@ public:
     };
     Q_ENUM(Event)
 
-    explicit ReplyEventProxy(QNetworkReply *reply, QObject *parent = nullptr)
-        : QObject(parent)
-    {
-        // readyRead
-        connect(reply, &QNetworkReply::readyRead,
-                this, [this] {
-                    emit event(Event::ReadyRead);
-                });
-
-        // finished
-        connect(reply, &QNetworkReply::finished,
-                this, [this] {
-                    emit event(Event::Finished);
-                });
-
-        // errorOccurred (Qt 5/6 name is errorOccurred; if you're on Qt5 < 5.15, adjust)
-        connect(reply, &QNetworkReply::errorOccurred,
-                this, [this](QNetworkReply::NetworkError) {
-                    emit event(Event::Error);
-                });
-    }
+    explicit ReplyEventProxy(QNetworkReply *reply, QObject *parent = nullptr);
 
 signals:
     void event(ReplyEventProxy::Event ev);
@@ -165,10 +141,13 @@ public:
     qvw::WhisperEngine& whisperEngine();
     qvw::LlamaEngine& llamaEngine();
 
+    bool isDownloaded(ModelKind kind, const ModelInfo& mi) const;
+
 signals:
-    void downloadProgress(QString name, qint64 bytesReceived, qint64 bytesTotal);
+    void downloadProgressRatio(const QString& name, double ratio); // 0..1
     void modelReady(const QString& modelId);
     void stateChanged();
+    void modelDownloaded(ModelKind kind, const std::string& id);
 
 private:
     using instances_map_t = std::map<QString /* model id */, std::shared_ptr<ModelInstance>>;

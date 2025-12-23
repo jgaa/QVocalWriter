@@ -62,5 +62,10 @@ struct ModelInfo {
     std::string_view download_url; // If it ends with '/', the file name is appended for download
 };
 
+enum class ModelKind {
+    WHISPER,
+    GENERAL
+};
+
 using model_list_t = std::span<const ModelInfo>; // NB: Non owning
 using models_t = std::vector<ModelInfo>;

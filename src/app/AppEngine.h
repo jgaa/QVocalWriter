@@ -9,6 +9,7 @@
 #include "Queue.h"
 #include "ModelInfo.h"
 #include "ChatMessagesModel.h"
+#include "AvailableModelsModel.h"
 
 class AudioRecorder;
 class AudioFileWriter;
@@ -28,13 +29,14 @@ class AppEngine : public QObject
     Q_PROPERTY(QStringList transcribeModels READ transcribeModels NOTIFY languageIndexChanged)
     Q_PROPERTY(QStringList translateModels READ translateModels CONSTANT)
     Q_PROPERTY(QStringList documentModels READ documentModels CONSTANT)
-    Q_PROPERTY(QStringList chatModels READ chatModels CONSTANT)
+    Q_PROPERTY(AvailableModelsModel *chatModels READ chatModels CONSTANT)
 
     Q_PROPERTY(int languageIndex READ languageIndex WRITE setLanguageIndex NOTIFY languageIndexChanged)
     Q_PROPERTY(QString transcribeModelName READ transcribeModelName() WRITE setTranscribeModelName NOTIFY transcribeModelNameChanged)
     Q_PROPERTY(QString transcribePostModelName READ transcribePostModelName() WRITE setTranscribePostModelName NOTIFY postTranscribeModelNameChanged)
-    Q_PROPERTY(QString chatModelName READ chatModelName() WRITE setChatModelName NOTIFY chatModelNameChanged)
+    Q_PROPERTY(QString chatModelName READ chatModelName() NOTIFY chatModelNameChanged)
     Q_PROPERTY(bool canPrepare READ canPrepare NOTIFY stateFlagsChanged)
+    Q_PROPERTY(bool canPrepareforChat READ canPrepareForChat NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canStart READ canStart NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canStop READ canStop NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool isBusy READ isBusy NOTIFY stateFlagsChanged)
@@ -86,7 +88,9 @@ public:
 
     QStringList translateModels() const;
     QStringList documentModels() const;
-    QStringList chatModels() const;
+    AvailableModelsModel *chatModels() {
+        return &chat_models_;
+    }
 
     int  languageIndex() const { return language_index_; }
     QString transcribeModelName() const { return transcribe_model_name_;}
@@ -94,12 +98,12 @@ public:
     void setTranscribePostModelName(const QString& name);
     QString transcribePostModelName() const { return transcribe_post_model_name_;}
     QString chatModelName() const;
-    void setChatModelName(const QString& name);
     std::string getChatSystemPrompt() const;
 
     int modelIndex(const QString& name) const;
 
     bool canPrepare() const;
+    bool canPrepareForChat() const;
     bool canStart()   const;
     bool canStop()    const;
     bool isBusy()     const;
@@ -126,7 +130,8 @@ signals:
     void partialTextAvailable(const QString &text);
     void finalTextAvailable(const QString &text);
     void errorOccurred(const QString &message);
-    void downloadProgress(QString name, qint64 bytesReceived, qint64 bytesTotal);
+    //void downloadProgress(QString name, qint64 bytesReceived, qint64 bytesTotal);
+    void downloadProgressRatio(const QString& name, double ratio); // 0..1
     void recordingLevelChanged();
     void recordedTextChanged();
     void microphonesChanged();
@@ -158,8 +163,10 @@ private:
     void setStateText(QString text = {});
     void prepareLanguages();
     QCoro::Task<bool> sendChatPrompt(const QString& prompt);
+    void prepareAvailableModels();
 
     ChatMessagesModel chat_messages_model_;
+    AvailableModelsModel chat_models_{ModelKind::GENERAL, "chat_model.selected"};
     std::shared_ptr<ChatConversation> chat_conversation_; // the current conversation
     AudioController audio_controller_;
     State state_{State::Idle};
@@ -168,7 +175,7 @@ private:
     int language_index_{0}; // Auto
     QString transcribe_model_name_{};
     QString transcribe_post_model_name_{};
-    QString chat_model_name_{};
+    //QString chat_model_name_{};
     QString pcm_file_path_;
     std::shared_ptr<chunk_queue_t> chunk_queue_;
     std::shared_ptr<AudioRecorder> recorder_;

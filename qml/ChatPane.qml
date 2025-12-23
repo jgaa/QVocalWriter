@@ -10,7 +10,8 @@ Item {
     implicitHeight: column.implicitHeight
 
     // local UI state
-    property string selectedModelName: modelCombo.currentText
+    //property string selectedModelName: modelCombo.currentText
+    property bool hasModel: modelCombo.currentIndex >= 0
     property string lastChatError: ""
 
     function isUserActor(actor) {
@@ -51,7 +52,16 @@ Item {
                     Layout.fillWidth: true
                     spacing: 8
 
-                    ComboBox {
+                    // ComboBox {
+                    //     id: modelCombo
+                    //     Layout.fillWidth: true
+                    //     model: appEngine.chatModels
+
+                    //     onCurrentTextChanged: {
+                    //         model.selectedModelName = currentText
+                    //     }
+                    // }
+                    ModelPicker {
                         id: modelCombo
                         Layout.fillWidth: true
                         model: appEngine.chatModels
@@ -59,8 +69,8 @@ Item {
 
                     Button {
                         text: qsTr("Prepare")
-                        enabled: appEngine.canPrepare && selectedModelName.length > 0
-                        onClicked: appEngine.prepareForChat(selectedModelName)
+                        enabled: appEngine.canPrepareForChat && hasModel
+                        onClicked: appEngine.prepareForChat()
                     }
 
                     Button {
@@ -70,40 +80,8 @@ Item {
                     }
                 }
 
-                // --- Download progress (reuses your signal) ---
-                RowLayout {
+                DownloadProgress {
                     Layout.fillWidth: true
-                    spacing: 8
-
-                    Label {
-                        id: downloadLabel
-                        property string name: ""
-                        text: name.length ? qsTr("Downloading " + name) : ""
-                        visible: downloadBar.visible
-                        Layout.alignment: Qt.AlignVCenter
-                    }
-
-                    ProgressBar {
-                        id: downloadBar
-                        Layout.fillWidth: true
-
-                        property int bytesReceived: 0
-                        property int bytesTotal: 0
-
-                        from: 0
-                        to: 1
-                        value: bytesTotal > 0 ? bytesReceived / bytesTotal : 0
-                        visible: bytesTotal > 0 && bytesReceived < bytesTotal
-
-                        Connections {
-                            target: appEngine
-                            function onDownloadProgress(name, bytesReceivedArg, bytesTotalArg) {
-                                downloadLabel.name = name
-                                downloadBar.bytesReceived = bytesReceivedArg
-                                downloadBar.bytesTotal = bytesTotalArg
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -173,15 +151,7 @@ Item {
                                 selectByMouse: true
                                 background: null
                                 Layout.fillWidth: true
-                            }
-
-
-                            BusyIndicator {
-                                running: !isUser && !completed
-                                visible: running
-                                width: 18
-                                height: 18
-                                opacity: 0.6
+                                textFormat: isAssistant ? TextEdit.MarkdownText : TextEdit.PlainText
                             }
                         //}
                     //}
@@ -217,10 +187,10 @@ Item {
                     Layout.fillWidth: true
                     spacing: 8
 
-                    BusyIndicator {
-                        running: appEngine.isBusy
-                        visible: running
-                    }
+                    // BusyIndicator {
+                    //     running: appEngine.isBusy
+                    //     visible: running
+                    // }
 
                     Button {
                         id: sendButton

@@ -190,35 +190,8 @@ Item {
             Layout.fillWidth: true
             spacing: 8
 
-            Label {
-                text: qsTr("Pre-model download progress:")
-                Layout.alignment: Qt.AlignVCenter
-                visible: modelDownloadBar.visible
-            }
-
-            ProgressBar {
-                id: modelDownloadBar
+            DownloadProgress {
                 Layout.fillWidth: true
-
-                // local state to hold progress
-                property int bytesReceived: 0
-                property int bytesTotal: 0
-
-                from: 0
-                to: 1
-                value: bytesTotal > 0 ? bytesReceived / bytesTotal : 0
-
-                // only show while a download is actually running
-                visible: bytesTotal > 0 && bytesReceived < bytesTotal
-
-                // Listen to the C++ signal from appEngine
-                Connections {
-                    target: appEngine
-                    function onModelDownloadProgress(bytesReceivedArg, bytesTotalArg) {
-                        modelDownloadBar.bytesReceived = bytesReceivedArg
-                        modelDownloadBar.bytesTotal = bytesTotalArg
-                    }
-                }
             }
         }
 

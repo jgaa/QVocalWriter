@@ -114,11 +114,12 @@ void AppEngine::prepareForRecording()
 
 void AppEngine::prepareForChat()
 {
-    if (chat_model_name_.isEmpty()) {
-        failed("Chat model name is empty.");
+    LOG_TRACE_N << "Preparing for chat with model: " << chat_models_.currentId();
+    if (chat_models_.empty()) {
+        failed("No chat model is selected.");
         return;
     }
-    startPrepareForChat(chat_model_name_);
+    startPrepareForChat(QString::fromUtf8(chat_models_.currentId()));
 }
 
 void AppEngine::chatPrompt(const QString &prompt)
@@ -154,18 +155,39 @@ QCoro::Task<bool> AppEngine::sendChatPrompt(const QString &prompt)
 
     setState(State::Processing);
 
+    // Handle partial updates
+    current_conversation->addMessage(make_shared<ChatMessage>(PromptRole::Assistant, ""));
+
+    connect(chat_model_.get(), &Model::partialTextAvailable, [this](const QString& msg) {
+        LOG_TRACE_N << "Chat model partial text available: " << msg;
+        if (chat_conversation_) {
+            chat_conversation_->updateLastMessage(msg.toStdString());
+        }
+    });
+
     // TODO: Handle replay of the full conversation if we resumed an existing one from storage.
     // Conversation continuation is handled by the model context params.
     auto result = co_await chat_model_->prompt(std::move(formatted_prompt),
                                                qvw::LlamaSessionCtx::Params::Chat(true));
     assert(current_conversation);
+    assert(chat_model_);
 
-    // TODO: Handle final update after partial updates
+    // unconnect partial text signal
+    disconnect(chat_model_.get(), &GeneralModel::partialTextAvailable, nullptr, nullptr);
+
+
     // (we just change the text of the last message (agent message for partial updates) and set the completed flag to true).
-    current_conversation->addMessage(make_shared<ChatMessage>(PromptRole::Assistant,
-                                                          chat_model_->finalText()));
+    current_conversation->updateLastMessage(chat_model_->finalText());
+    current_conversation->finalizeLastMessage();
     setState(State::Ready);
     co_return result;
+}
+
+void AppEngine::prepareAvailableModels()
+{
+    chat_models_.SetModels(
+        ModelMgr::instance().availableModels(
+            chat_models_.kind(), ModelInfo::Capability::Chat));
 }
 
 void AppEngine::saveTranscriptToFile(const QUrl &path)
@@ -231,7 +253,6 @@ AppEngine::AppEngine() {
 
         transcribe_model_name_ = lookup_name(settings.value("transcribe.model", "").toString(), ModelKind::WHISPER); // None
         transcribe_post_model_name_ = lookup_name(settings.value("transcribe.post-model", "base").toString(), ModelKind::WHISPER);
-        chat_model_name_ = lookup_name(settings.value("chat.model", "llama3.1-8b-instruct-q4_k_m").toString(), ModelKind::GENERAL);
     }
 
     const QString baseDir =
@@ -242,9 +263,9 @@ AppEngine::AppEngine() {
 
     connect(
         model_mgr_.get(),
-        &ModelMgr::downloadProgress,
+        &ModelMgr::downloadProgressRatio,
         this,
-        &AppEngine::downloadProgress
+        &AppEngine::downloadProgressRatio
         );
 
     connect (
@@ -260,6 +281,13 @@ AppEngine::AppEngine() {
         this,
         &AppEngine::currentMicChanged
         );
+
+    prepareAvailableModels();
+
+    connect(&chat_models_,
+            &AvailableModelsModel::selectedChanged,
+            this,
+            &AppEngine::stateFlagsChanged);
 }
 
 QStringList AppEngine::microphones() const
@@ -320,16 +348,6 @@ QStringList AppEngine::documentModels() const
     return models;
 }
 
-QStringList AppEngine::chatModels() const
-{
-    QStringList models;
-    auto all = ModelMgr::instance().availableModels(ModelKind::GENERAL, ModelInfo::Capability::Chat);
-    for (const auto &m : all) {
-        models.append(QString::fromUtf8(m.name));
-    }
-    return models;
-}
-
 int AppEngine::modelIndex(const QString &name) const
 {
     static QStringList model_list = transcribeModels();
@@ -358,6 +376,11 @@ bool AppEngine::canPrepare() const
     const auto post_model_index = modelIndex(transcribe_post_model_name_);
     const bool have_selecion = language_index_ >= 0 && (post_model_index >= 0 || post_model_index >= 0);
     return state() == State::Idle && have_selecion;
+}
+
+bool AppEngine::canPrepareForChat() const
+{
+    return state() == State::Idle && !chat_models_.empty();
 }
 
 bool AppEngine::canStart() const
@@ -410,19 +433,7 @@ void AppEngine::setTranscribePostModelName(const QString &name) {
 
 QString AppEngine::chatModelName() const
 {
-    return chat_model_name_;
-}
-
-void AppEngine::setChatModelName(const QString &name)
-{
-    if (chat_model_name_ != name) {
-        chat_model_name_ = name;
-        emit chatModelNameChanged();
-        emit stateFlagsChanged();
-        if (const auto mi = ModelMgr::instance().findModelByName(ModelKind::GENERAL, name)) {
-            QSettings{}.setValue("chat.model", QString::fromUtf8((mi->id)));
-        }
-    }
+    return chat_models_.selectedModelName();
 }
 
 string AppEngine::getChatSystemPrompt() const
@@ -505,16 +516,16 @@ QCoro::Task<void> AppEngine::startPrepareForRecording()
     co_return;
 }
 
-QCoro::Task<void> AppEngine::startPrepareForChat(QString name)
+QCoro::Task<void> AppEngine::startPrepareForChat(QString id)
 {
-    LOG_INFO_N << "Preparing for chat with model: " << name;
+    LOG_INFO_N << "Preparing for chat with model: " << id;
 
     setStateText(tr("Preparing chat model..."));
 
-    auto mi = ModelMgr::instance().findModelByName(ModelKind::GENERAL, name);
+    auto mi = ModelMgr::instance().findModelById(ModelKind::GENERAL, id);
 
     if (!mi) {
-        failed(tr("Chat model not found: ") + name);
+        failed(tr("Chat model not found: ") + id);
         co_return;
     }
 
@@ -714,7 +725,7 @@ QCoro::Task<void> AppEngine::onRecordingDone()
 
 bool AppEngine::failed(const QString &why)
 {
-    LOG_ERROR_N << "Recording failed: " << why;
+    LOG_ERROR_N << "Operation failed: " << why;
     emit errorOccurred(why);
     setState(State::Error);
     return false;

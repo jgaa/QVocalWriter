@@ -203,6 +203,9 @@ qt_add_qml_module(${PROJECT_NAME}
           src/app/Transcriber.h
           src/app/TranscriberWhisper.cpp
           src/app/TranscriberWhisper.h
+          SOURCES src/app/AvailableModelsModel.h src/app/AvailableModelsModel.cpp
+          QML_FILES qml/ModelPicker.qml
+          QML_FILES qml/DownloadProgress.qml
 )
 
 # Add includepaths
