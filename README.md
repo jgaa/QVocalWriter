@@ -16,6 +16,24 @@ The focus remains on:
 
 ![screenshot](doc/qvocalwriter-screenshot.jpg)
 
+## A Lightweight Alternative to LM Studio
+
+**QVocalWriter** is intentionally designed as a lightweight alternative to tools like **LM Studio**, 
+focusing on native performance and low resource usage.
+
+Unlike Electron-based applications, QVocalWriter is built with **Qt and C++**, resulting in:
+
+* Significantly lower memory usage
+* Far fewer file handles and background processes
+* Faster startup times
+* Better coexistence with development tools on the same system
+
+On my Linux workstation, QVocalWriter uses approximately **83 MB of memory before any models are loaded**, 
+making it suitable for systems where heavier frameworks struggle or interfere with other applications.
+
+The goal is not to replicate every feature of larger all-in-one tools, but to provide a 
+**simple, efficient, and transparent** way to work with local language models without unnecessary overhead.
+
 ## Features
 
 * **Transcription**

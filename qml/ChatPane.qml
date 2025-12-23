@@ -69,7 +69,7 @@ Item {
 
                     Button {
                         text: qsTr("Prepare")
-                        enabled: appEngine.canPrepareForChat && hasModel
+                        enabled: appEngine.canPrepareForChat && root.hasModel
                         onClicked: appEngine.prepareForChat()
                     }
 
