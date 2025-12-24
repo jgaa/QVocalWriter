@@ -7,17 +7,9 @@ Control {
     id: root
 
     property var model: null
-    property string placeholderText: qsTr("Select model…")
     signal selected(int index)
 
     readonly property int selectedIndex: (model ? model.selected : -1)
-
-    function selectedName() {
-        if (!model || selectedIndex < 0) return placeholderText
-        // requires model.roleValue(row, "name")
-        const v = model.roleValue(selectedIndex, "name")
-        return (v === undefined || v === null || v === "") ? placeholderText : v
-    }
 
     contentItem: RowLayout {
         spacing: 8
@@ -25,7 +17,7 @@ Control {
         Button {
             id: currentButton
             Layout.fillWidth: true
-            text: root.selectedName()
+            text: root.model.selectedName
             onClicked: pickerPopup.open()
 
             contentItem: RowLayout {

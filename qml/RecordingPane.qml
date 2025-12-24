@@ -95,40 +95,9 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
             }
 
-            ComboBox {
-                id: transcribeModelCombo
+            ModelPicker {
                 Layout.fillWidth: true
-                model: appEngine.transcribeModels
-                currentIndex: -1
-
-                Component.onCompleted: {
-                    currentIndex = indexOfModel(
-                        appEngine.transcribeModels,
-                        appEngine.transcribeModelName
-                    )
-                }
-
-                onCurrentIndexChanged: {
-                    appEngine.transcribeModelName =
-                        nameAtIndex(appEngine.transcribeModels, currentIndex)
-                }
-
-                Connections {
-                    target: appEngine
-
-                    function onTranscribeModelNameChanged() {
-                        transcribeModelCombo.currentIndex =
-                            indexOfModel(appEngine.transcribeModels,
-                                         appEngine.transcribeModelName)
-                    }
-
-                    // Your model list NOTIFY signal
-                    function onLanguageIndexChanged() {
-                        transcribeModelCombo.currentIndex =
-                            indexOfModel(appEngine.transcribeModels,
-                                         appEngine.transcribeModelName)
-                    }
-                }
+                model: appEngine.liveTranscribeModels
             }
         }
 
@@ -141,39 +110,9 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
             }
 
-            ComboBox {
-                id: postModelCombo
+            ModelPicker {
                 Layout.fillWidth: true
-                model: appEngine.transcribeModels
-                currentIndex: -1
-
-                Component.onCompleted: {
-                    currentIndex = indexOfModel(
-                        appEngine.transcribeModels,
-                        appEngine.transcribePostModelName
-                    )
-                }
-
-                onCurrentIndexChanged: {
-                    appEngine.transcribePostModelName =
-                        nameAtIndex(appEngine.transcribeModels, currentIndex)
-                }
-
-                Connections {
-                    target: appEngine
-
-                    function onTranscribePostModelNameChanged() {
-                        postModelCombo.currentIndex =
-                            indexOfModel(appEngine.transcribeModels,
-                                         appEngine.transcribePostModelName)
-                    }
-
-                    function onLanguageIndexChanged() {
-                        postModelCombo.currentIndex =
-                            indexOfModel(appEngine.transcribeModels,
-                                         appEngine.transcribePostModelName)
-                    }
-                }
+                model: appEngine.postTranscribeModels
             }
         }
 

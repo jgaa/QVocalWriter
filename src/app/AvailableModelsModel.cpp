@@ -17,15 +17,19 @@ AvailableModelsModel::AvailableModelsModel(ModelKind kind, QString propertiesTag
     }
 }
 
-void AvailableModelsModel::SetModels(const std::span<const ModelInfo> &models)
+void AvailableModelsModel::SetModels(const models_t& models)
 {
+    static const ModelInfo none_model{"[none]"};
+
     models_.clear();
-    models_.reserve(models.size());
+    models_.reserve(models.size() +1);
+    models_.emplace_back(&none_model);
     for(const auto& m : models) {
+        assert(m != nullptr);
 
         ModelEntry entry;
         entry.info = m;
-        entry.downloaded = ModelMgr::instance().isDownloaded(kind_, m);
+        entry.downloaded = ModelMgr::instance().isDownloaded(kind_, *m);
 
         models_.emplace_back(std::move(entry));
     }
@@ -34,8 +38,8 @@ void AvailableModelsModel::SetModels(const std::span<const ModelInfo> &models)
         // select first model by default
         bool found = false;
         for (const auto& entry : models_) {
-            if (entry.info.id == selected_model_id_) {
-                selected_model_name_ = QString::fromUtf8(entry.info.name);
+            if (entry.info->id == selected_model_id_) {
+                selected_model_name_ = QString::fromUtf8(entry.info->name);
                 found = true;
                 break;
             }
@@ -59,7 +63,7 @@ void AvailableModelsModel::SetModels(const std::span<const ModelInfo> &models)
                 // update downloaded status in models_ for id
                 int row = 0;
                 for (auto& entry : models_) {
-                    if (entry.info.id == id) {
+                    if (entry.info->id == id) {
                         // Send row changed signal
                         QModelIndex idx = index(row, 0);
                         entry.downloaded = true;
@@ -77,9 +81,13 @@ void AvailableModelsModel::SetModels(const std::span<const ModelInfo> &models)
 
 int AvailableModelsModel::selected() const
 {
+    if (selected_model_id_.empty()) {
+        return -1;
+    }
+
     // Search for selected_model_id_
     for (size_t i = 0; i < models_.size(); ++i) {
-        if (models_[i].info.id == selected_model_id_) {
+        if (models_[i].info->id == selected_model_id_) {
             return static_cast<int>(i);
         }
     }
@@ -96,32 +104,24 @@ void AvailableModelsModel::setSelected(int index)
             selected_model_id_.clear();
             selected_model_name_.clear();
         } else {
-            selected_model_id_ = models_[index].info.id;
-            selected_model_name_ = QString::fromUtf8(models_[index].info.name);
+            if (auto& id = models_[index].info->id; !id.empty()) {
+                selected_model_id_ = id;
+                selected_model_name_ = QString::fromUtf8(models_[index].info->name);
+            } else {
+                selected_model_id_.clear();
+                selected_model_name_.clear();
+            }
         }
         emit selectedChanged();
         QSettings{}.setValue(properties_tag_, QString::fromUtf8(selected_model_id_));
     }
 }
 
-QVariant AvailableModelsModel::roleValue(int row, const QString &roleName) const
-{
-    if (row < 0 || row >= rowCount())
-        return {};
-
-    const auto roles = roleNames();
-    const int role = roles.key(roleName.toUtf8(), -1);
-    if (role < 0)
-        return {};
-
-    return data(index(row, 0), role);
-}
-
 const ModelInfo *AvailableModelsModel::selectedModel() const
 {
     const int index = selected();
     if (index >= 0 && static_cast<size_t>(index) < models_.size()) {
-        return &models_[index].info;
+        return models_[index].info;
     }
     return nullptr;
 }
@@ -144,11 +144,11 @@ QVariant AvailableModelsModel::data(const QModelIndex &index, int role) const
 
     switch (static_cast<Roles>(role)) {
     case Roles::Name:
-        return QString::fromUtf8(entry.info.name);
+        return QString::fromUtf8(entry.info->name);
     case Roles::Id:
-        return QString::fromUtf8(entry.info.id);
+        return QString::fromUtf8(entry.info->id);
     case Roles::SizeMB:
-        return static_cast<qulonglong>(entry.info.size_mb);
+        return static_cast<qulonglong>(entry.info->size_mb);
     case Roles::Downloaded:
         return entry.downloaded;
     default:

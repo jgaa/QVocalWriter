@@ -188,6 +188,14 @@ void AppEngine::prepareAvailableModels()
     chat_models_.SetModels(
         ModelMgr::instance().availableModels(
             chat_models_.kind(), ModelInfo::Capability::Chat));
+
+    live_transcribe_models_.SetModels(
+        ModelMgr::instance().availableModels(
+            live_transcribe_models_.kind(), ModelInfo::Capability::Transcribe));
+
+    post_transcribe_models_.SetModels(
+        ModelMgr::instance().availableModels(
+            post_transcribe_models_.kind(), ModelInfo::Capability::Transcribe));
 }
 
 void AppEngine::saveTranscriptToFile(const QUrl &path)
@@ -251,7 +259,6 @@ AppEngine::AppEngine() {
             return {};
         };
 
-        transcribe_model_name_ = lookup_name(settings.value("transcribe.model", "").toString(), ModelKind::WHISPER); // None
         transcribe_post_model_name_ = lookup_name(settings.value("transcribe.post-model", "base").toString(), ModelKind::WHISPER);
     }
 
@@ -288,6 +295,16 @@ AppEngine::AppEngine() {
             &AvailableModelsModel::selectedChanged,
             this,
             &AppEngine::stateFlagsChanged);
+
+    connect(&live_transcribe_models_,
+            &AvailableModelsModel::selectedChanged,
+            this,
+            &AppEngine::stateFlagsChanged);
+
+    connect(&post_transcribe_models_,
+            &AvailableModelsModel::selectedChanged,
+            this,
+            &AppEngine::stateFlagsChanged);
 }
 
 QStringList AppEngine::microphones() const
@@ -312,75 +329,27 @@ void AppEngine::setCurrentMic(int index)
     audio_controller_.setInputDevice(index);
 }
 
-QStringList AppEngine::transcribeModels() const
-{
-    QStringList models;
-    auto all = ModelMgr::instance().availableModels(ModelKind::WHISPER, ModelInfo::Capability::Transcribe);
-    for (const auto &m : all) {
-        if (language_index_ != 1) { // en
-            // ignore models ending in -en
-            if (QString::fromUtf8(m.name).endsWith("-en")) {
-                continue;
-            }
-        }
-        models.append(QString::fromUtf8(m.name));
-    }
-    return models;
-}
-
 QStringList AppEngine::translateModels() const
 {
     QStringList models;
     auto all = ModelMgr::instance().availableModels(ModelKind::GENERAL, ModelInfo::Capability::Translate);
-    for (const auto &m : all) {
-        models.append(QString::fromUtf8(m.name));
+    for (const auto *m : all) {
+        assert(m);
+        models.append(QString::fromUtf8(m->name));
     }
     return models;
-}
-
-QStringList AppEngine::documentModels() const
-{
-    QStringList models;
-    auto all = ModelMgr::instance().availableModels(ModelKind::GENERAL, ModelInfo::Capability::Rewrite);
-    for (const auto &m : all) {
-        models.append(QString::fromUtf8(m.name));
-    }
-    return models;
-}
-
-int AppEngine::modelIndex(const QString &name) const
-{
-    static QStringList model_list = transcribeModels();
-    static auto language_id = language_index_;
-
-    if (name.startsWith('[')) {
-        return -1; // empty
-    }
-
-    if (language_id != language_index_) {
-        language_id = language_index_;
-        model_list = transcribeModels();
-    }
-
-    for (int i = 0; i < model_list.size(); ++i) {
-        if (model_list.at(i) == name) {
-            return i;
-        }
-    }
-    return -1;
 }
 
 bool AppEngine::canPrepare() const
 {
-    const auto model_index = modelIndex(transcribe_model_name_);
-    const auto post_model_index = modelIndex(transcribe_post_model_name_);
-    const bool have_selecion = language_index_ >= 0 && (post_model_index >= 0 || post_model_index >= 0);
+    const bool have_selecion = live_transcribe_models_.hasSelection()
+                               || post_transcribe_models_.hasSelection();
     return state() == State::Idle && have_selecion;
 }
 
 bool AppEngine::canPrepareForChat() const
 {
-    return state() == State::Idle && !chat_models_.empty();
+    return state() == State::Idle && !chat_models_.hasSelection();
 }
 
 bool AppEngine::canStart() const
@@ -406,28 +375,6 @@ void AppEngine::setLanguageIndex(int index)
         emit languageIndexChanged(index);
         emit stateFlagsChanged();
         QSettings{}.setValue("transcribe.language", QString::fromUtf8(languageList_.at(index).whisper_language));
-    }
-}
-
-void AppEngine::setTranscribeModelName(const QString &name) {
-    if (transcribe_model_name_ != name) {
-        transcribe_model_name_ = name;
-        emit transcribeModelNameChanged();
-        emit stateFlagsChanged();
-        if (const auto mi = ModelMgr::instance().findModelByName(ModelKind::WHISPER, name)) {
-            QSettings{}.setValue("transcribe.model", QString::fromUtf8((mi->id)));
-        }
-    }
-}
-
-void AppEngine::setTranscribePostModelName(const QString &name) {
-    if (transcribe_post_model_name_ != name) {
-        transcribe_post_model_name_ = name;
-        emit postTranscribeModelNameChanged();
-        emit stateFlagsChanged();
-        if (const auto mi = ModelMgr::instance().findModelByName(ModelKind::WHISPER, name)) {
-            QSettings{}.setValue("transcribe.post-model", QString::fromUtf8((mi->id)));
-        }
     }
 }
 
@@ -546,38 +493,36 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
     // Live transcriber.Optional.
     assert(rec_transcriber_ == nullptr);
     const auto whisper_models = ModelMgr::instance().availableModels(ModelKind::WHISPER, ModelInfo::Capability::Transcribe);
-    if (!transcribe_model_name_.isEmpty() && !transcribe_model_name_.startsWith('[')) {
+    if (live_transcribe_models_.hasSelection()) {
+        const auto qid = QString::fromUtf8(post_transcribe_models_.currentId());
+        if (auto model = ModelMgr::instance().findModelById(ModelKind::WHISPER, qid); model) {
 
-        if (auto model = ModelMgr::instance().findModelByName(ModelKind::WHISPER, transcribe_model_name_); model) {
-
-            LOG_DEBUG_N << "Preparing live transcriber model: " << transcribe_model_name_;
+            LOG_DEBUG_N << "Preparing live transcriber model: " << qid;
 
             const auto language = languageList_.at(size_t(language_index_));
-            const auto model_id = model->id;
             if (rec_transcriber_ = co_await prepareTranscriber(
                     "live-transcriber"s,
                     *model,
                     language.whisper_language,
                     true, // Load the live transcriber so it reacts faster when we start recording
-                    transcribe_post_model_name_.isEmpty() // Submit final text?
+                    !post_transcribe_models_.hasSelection() // Submit final text?
                     ); !rec_transcriber_) {
-                co_return failed(tr("Failed to prepare live transcriber") + ": " + QString::fromUtf8(model->name));
+                co_return failed(tr("Failed to prepare live transcriber %1").arg(qid));
             }
 
         } else {
-            co_return failed(tr("Transcription model not found") + ": " + transcribe_model_name_);
+            co_return failed(tr("Transcription model not found: %1").arg(qid));
         }
     }
 
     // same with post_transcriber_ and transcribe_post_model_name_
-    if (!transcribe_post_model_name_.isEmpty() && !transcribe_model_name_.startsWith('[')) {
+    if (post_transcribe_models_.hasSelection()) {
+        const auto qid = QString::fromUtf8(post_transcribe_models_.currentId());
+        if (auto model = ModelMgr::instance().findModelById(ModelKind::WHISPER, qid); model) {
 
-        if (auto model = ModelMgr::instance().findModelByName(ModelKind::WHISPER, transcribe_post_model_name_); model) {
-
-            LOG_DEBUG_N << "Preparing post transcriber model: " << transcribe_post_model_name_;
+            LOG_DEBUG_N << "Preparing post transcriber model: " << qid;
 
             const auto language = languageList_.at(size_t(language_index_));
-            const auto model_id = model->id;
             if (post_transcriber_ = co_await prepareTranscriber(
                     "post--transcriber"s,
                     *model,
@@ -585,11 +530,11 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
                     true, // Load the live transcriber so it reacts faster when we start recording
                     true // Submit final text?
                     ); !rec_transcriber_) {
-                co_return failed(tr("Failed to prepare post transcriber") + ": " + QString::fromUtf8(model->name));
+                co_return failed(tr("Failed to prepare post-transcriber %1").arg(qid));
             }
 
         } else {
-            co_return failed(tr("Transcription model not found") + ": " + transcribe_post_model_name_);
+            co_return failed(tr("Transcription model not found: %1").arg(qid));
         }
     }
 

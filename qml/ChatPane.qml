@@ -52,15 +52,6 @@ Item {
                     Layout.fillWidth: true
                     spacing: 8
 
-                    // ComboBox {
-                    //     id: modelCombo
-                    //     Layout.fillWidth: true
-                    //     model: appEngine.chatModels
-
-                    //     onCurrentTextChanged: {
-                    //         model.selectedModelName = currentText
-                    //     }
-                    // }
                     ModelPicker {
                         id: modelCombo
                         Layout.fillWidth: true

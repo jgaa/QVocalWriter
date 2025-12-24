@@ -14,6 +14,7 @@ class AvailableModelsModel : public QAbstractListModel
     QML_ELEMENT
 
     Q_PROPERTY(int selected READ selected WRITE setSelected NOTIFY selectedChanged)
+    Q_PROPERTY(QString selectedName READ selectedModelName() NOTIFY selectedChanged)
 public:
     enum class Roles {
         Name = Qt::UserRole + 1,
@@ -23,15 +24,14 @@ public:
     };
 
     struct ModelEntry {
-        ModelInfo info{};
+        const ModelInfo *info{};
         bool downloaded{false};
     };
 
     Q_INVOKABLE void setSelected(int index);
-    Q_INVOKABLE QVariant roleValue(int row, const QString &roleName) const;
 
     AvailableModelsModel(ModelKind kind, QString propertiesTag, QObject *parent = nullptr);
-    void SetModels(const std::span<const ModelInfo>& models);
+    void SetModels(const models_t& models);
     int selected() const;
     const ModelInfo* selectedModel() const;
     const QString& selectedModelName() const {
@@ -45,6 +45,10 @@ public:
     }
     bool empty() const noexcept {
         return models_.empty();
+    }
+
+    bool hasSelection() const noexcept {
+        return !selected_model_id_.empty();
     }
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;

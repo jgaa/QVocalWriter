@@ -68,4 +68,4 @@ enum class ModelKind {
 };
 
 using model_list_t = std::span<const ModelInfo>; // NB: Non owning
-using models_t = std::vector<ModelInfo>;
+using models_t = std::vector<const ModelInfo *>;

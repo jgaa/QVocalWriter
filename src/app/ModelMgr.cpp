@@ -29,7 +29,6 @@ namespace {
 using mi_t = ModelInfo;
 constexpr auto all_whisper_models = std::to_array<mi_t>({
     // Whisper
-    {"[none]", "", ModelInfo::PromptStyle::None, "", mi_t::Q_Unknown, 0, "", mi_t::Transcribe, ""},
     {"tiny", "tiny-q5_1", ModelInfo::PromptStyle::None, "ggml-tiny-q5_1.bin", mi_t::Q5_1, 31,
      "2827a03e495b1ed3048ef28a6a4620537db4ee51", mi_t::Transcribe,
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
@@ -272,7 +271,7 @@ models_t ModelMgr::availableModels(ModelKind kind, ModelInfo::Capability purpose
 
     for (const auto& m : availableModels(kind)) {
         if ((m.capabilities & purpose) == purpose) {
-            models.push_back(m);
+            models.push_back(&m);
         }
     }
 
@@ -289,7 +288,7 @@ models_t ModelMgr::loadedModels(ModelKind kind) const noexcept
 
     for (const auto& [modelId, inst] : instances(kind)) {
         if (inst->isLoaded()) {
-            models.push_back(inst->modelInfo());
+            models.push_back(&inst->modelInfo());
         }
     }
 

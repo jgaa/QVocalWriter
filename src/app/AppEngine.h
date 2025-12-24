@@ -26,14 +26,11 @@ class AppEngine : public QObject
 
     Q_PROPERTY(State state READ state NOTIFY stateChanged)
     Q_PROPERTY(QStringList languages READ languages NOTIFY languagesChanged)
-    Q_PROPERTY(QStringList transcribeModels READ transcribeModels NOTIFY languageIndexChanged)
-    Q_PROPERTY(QStringList translateModels READ translateModels CONSTANT)
-    Q_PROPERTY(QStringList documentModels READ documentModels CONSTANT)
+    Q_PROPERTY(AvailableModelsModel *liveTranscribeModels READ liveTranscribeModels CONSTANT)
+    Q_PROPERTY(AvailableModelsModel *postTranscribeModels READ postTranscribeModels CONSTANT)
     Q_PROPERTY(AvailableModelsModel *chatModels READ chatModels CONSTANT)
 
     Q_PROPERTY(int languageIndex READ languageIndex WRITE setLanguageIndex NOTIFY languageIndexChanged)
-    Q_PROPERTY(QString transcribeModelName READ transcribeModelName() WRITE setTranscribeModelName NOTIFY transcribeModelNameChanged)
-    Q_PROPERTY(QString transcribePostModelName READ transcribePostModelName() WRITE setTranscribePostModelName NOTIFY postTranscribeModelNameChanged)
     Q_PROPERTY(QString chatModelName READ chatModelName() NOTIFY chatModelNameChanged)
     Q_PROPERTY(bool canPrepare READ canPrepare NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canPrepareforChat READ canPrepareForChat NOTIFY stateFlagsChanged)
@@ -65,8 +62,6 @@ public:
         std::string_view whisper_language; // "en"
     };
 
-    // Q_INVOKABLE void setModelName(const QString& name);
-    // Q_INVOKABLE void setPostModelName(const QString& name);
     Q_INVOKABLE void setLanguageIndex(int index);
     Q_INVOKABLE void startRecording();
     Q_INVOKABLE void stopRecording();
@@ -81,26 +76,28 @@ public:
 
     AudioController &audioController() { return audio_controller_; }
     QStringList languages()   const { return languages_; }
-    QStringList transcribeModels()  const;
     QStringList microphones() const;
     int currentMic() const;
     void setCurrentMic(int index);
 
     QStringList translateModels() const;
-    QStringList documentModels() const;
     AvailableModelsModel *chatModels() {
         return &chat_models_;
+    }
+    AvailableModelsModel *liveTranscribeModels() {
+        return &live_transcribe_models_;
+    }
+    AvailableModelsModel *postTranscribeModels() {
+        return &post_transcribe_models_;
     }
 
     int  languageIndex() const { return language_index_; }
     QString transcribeModelName() const { return transcribe_model_name_;}
-    void setTranscribeModelName(const QString& name);
-    void setTranscribePostModelName(const QString& name);
+    // void setTranscribeModelName(const QString& name);
+    // void setTranscribePostModelName(const QString& name);
     QString transcribePostModelName() const { return transcribe_post_model_name_;}
     QString chatModelName() const;
     std::string getChatSystemPrompt() const;
-
-    int modelIndex(const QString& name) const;
 
     bool canPrepare() const;
     bool canPrepareForChat() const;
@@ -167,6 +164,8 @@ private:
 
     ChatMessagesModel chat_messages_model_;
     AvailableModelsModel chat_models_{ModelKind::GENERAL, "chat_model.selected"};
+    AvailableModelsModel live_transcribe_models_{ModelKind::WHISPER, "transcribe_model.live.selected"};
+    AvailableModelsModel post_transcribe_models_{ModelKind::WHISPER, "transcribe_model.post.selected"};
     std::shared_ptr<ChatConversation> chat_conversation_; // the current conversation
     AudioController audio_controller_;
     State state_{State::Idle};
