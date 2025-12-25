@@ -5,6 +5,7 @@
 #include <string_view>
 #include <vector>
 #include <cstdint>
+#include <ctime>
 
 enum class PromptRole {
     System,
@@ -16,6 +17,8 @@ struct ChatMessage {
     PromptRole role;
     std::string content;
     bool completed{true}; // false during assistants partial updates
+    time_t timestamp{time(nullptr)};
+    double duration_seconds{0.0}; // models time to generate a full response
 };
 
 using messages_view_t = std::span<const ChatMessage * const>;

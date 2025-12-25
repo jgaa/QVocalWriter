@@ -1,12 +1,78 @@
+
+#include <QGuiApplication>
+#include <QClipboard>
+#include <QClipboard>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+
+
 #include "ChatMessagesModel.h"
 
 #include "logging.h"
 
 using namespace std;
 
+
 ChatMessagesModel::ChatMessagesModel(QObject *parent)
     : QAbstractListModel(parent)
 {
+}
+
+void ChatMessagesModel::copyMessageToClipboard(int row)
+{
+    if (auto msg = data(index(row), static_cast<int>(Roles::Message)).toString(); !msg.isEmpty()) {
+        QGuiApplication::clipboard()->setText(msg);
+    } else {
+        LOG_WARN_N << "No message found at row " << row;
+    }
+}
+
+void ChatMessagesModel::copyAllToClipboard(Format format)
+{
+    if (format == Format::Auto) {
+        format = Format::Markdown;
+    }
+
+    if (format == Format::Markdown) {
+        QString all;
+        for (const auto *msg : messages_) {
+            if (!msg) continue;
+            all += formatMessageAsMarkdown(*msg);
+            all += "\n\n";
+        }
+        QGuiApplication::clipboard()->setText(all.trimmed());
+        return;
+    }
+
+    QJsonArray messagesArray;
+
+    for (const auto *msg : messages_) {
+        if (!msg) {
+            continue;
+        }
+
+        const QJsonObject obj = formatMessageAsJSON(*msg);
+        messagesArray.append(obj);
+    }
+
+    QJsonObject root;
+    root.insert(QStringLiteral("messages"), messagesArray);
+
+    const QJsonDocument doc(root);
+    const QByteArray jsonBytes = doc.toJson(QJsonDocument::Indented); // or Compact
+    QGuiApplication::clipboard()->setText(QString::fromUtf8(jsonBytes));
+}
+
+
+void ChatMessagesModel::saveMessage(int index, Format format, const QUrl &path)
+{
+    
+}
+
+void ChatMessagesModel::saveConversation(int index, Format format, const QUrl &path)
+{
+    
 }
 
 
@@ -83,14 +149,7 @@ QVariant ChatMessagesModel::data(const QModelIndex &index, int role) const
 
     switch (static_cast<Roles>(role)) {
     case Roles::Actor:
-        switch (msg.role) {
-        case PromptRole::User:
-            return tr("You");
-        case PromptRole::Assistant:
-            return tr("Assistant");
-        default:
-            return tr("system");
-        }
+        return actorName(msg);
     case Roles::Message:
         LOG_TRACE_N << "Message at index " << ix << ": " << msg.content;
         return QString::fromStdString(msg.content);
@@ -118,4 +177,45 @@ QHash<int, QByteArray> ChatMessagesModel::roleNames() const
     roles[static_cast<int>(Roles::IsUser)] = "isUser";
     roles[static_cast<int>(Roles::IsAssistant)] = "isAssistant";
     return roles;
+}
+
+QString ChatMessagesModel::actorName(const ChatMessage &msg) const
+{
+    switch (msg.role) {
+    case PromptRole::User:
+        return tr("You");
+    case PromptRole::Assistant:
+        return tr("Assistant");
+    default:
+        return tr("system");
+    }
+}
+
+QString ChatMessagesModel::formatMessageAsMarkdown(const ChatMessage &msg) const
+{
+    const QString role = actorName(msg);
+    const QString content = QString::fromStdString(msg.content).trimmed();
+
+    const QString timestamp =
+        QDateTime::fromSecsSinceEpoch(msg.timestamp).toString(Qt::ISODate);
+
+    const QString duration =
+        QString::number(msg.duration_seconds, 'f', 2);
+
+    QString md;
+    md += "### " + role + "\n";
+    md += content + "\n\n";
+    md += "<sub>🕒 " + timestamp + " · ⏱ " + duration + "s</sub>";
+
+    return md;
+}
+
+QJsonObject ChatMessagesModel::formatMessageAsJSON(const ChatMessage &msg) const
+{
+    QJsonObject o;
+    o["role"] = actorName(msg);
+    o["content"] = QString::fromStdString(msg.content);
+    o["timestamp"] = QDateTime::fromSecsSinceEpoch(msg.timestamp).toString(Qt::ISODate);
+    o["duration"] = msg.duration_seconds;
+    return o;
 }

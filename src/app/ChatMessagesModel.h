@@ -4,7 +4,9 @@
 #include <vector>
 
 #include <QObject>
+#include <QQmlComponent>
 #include <QAbstractListModel>
+#include <QJsonObject>
 
 /*! Simple model to present chat messages to q QML ListView */
 
@@ -14,6 +16,7 @@
 class ChatMessagesModel : public QAbstractListModel
 {
     Q_OBJECT
+    QML_ELEMENT
 public:
     /*! We always wraps the entire list, buit the Updates type
      *  decides what signals we emit to the QML side.
@@ -33,7 +36,19 @@ public:
         IsAssistant
     };
 
+    enum class Format {
+        Auto, // deduce from file extension (.json) or use Markdown
+        Markdown,
+        JSON
+    };
+    Q_ENUM(Format)
+
     explicit ChatMessagesModel(QObject *parent = nullptr);
+
+    Q_INVOKABLE void copyMessageToClipboard(int index);
+    Q_INVOKABLE void copyAllToClipboard(Format format);
+    Q_INVOKABLE void saveMessage(int index, Format format, const QUrl& path);
+    Q_INVOKABLE void saveConversation(int index, Format format, const QUrl& path);
 
     void setMessages(std::span<const ChatMessage *> messages, Updates updates = Updates::Full);
 
@@ -42,10 +57,13 @@ public:
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-
 signals:
     void messagesChanged();
 
 private:
-    std::vector<const ChatMessage *> messages_; // Our own view, without and leading System message
+    QString actorName(const ChatMessage &msg) const;
+    QString formatMessageAsMarkdown(const ChatMessage &msg) const;
+    QJsonObject formatMessageAsJSON(const ChatMessage &msg) const;
+
+    std::vector<const ChatMessage *> messages_; // Our own view, without any leading System message
 };

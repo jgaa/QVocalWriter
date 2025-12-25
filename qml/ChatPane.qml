@@ -78,78 +78,111 @@ Item {
         }
 
         // --- Chat history ---
+        // --- Chat history ---
         Frame {
             Layout.fillWidth: true
             Layout.fillHeight: true
             padding: 8
-            Label {
-                id: errorLabel
-                visible: root.lastChatError.length > 0
-                text: qsTr("Error: ") + root.lastChatError
-                wrapMode: Text.WordWrap
-                color: palette.brightText
-                background: Rectangle { color: palette.mid; radius: 6; opacity: 0.9 }
-                padding: 8
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-            }
 
-            ListView {
-                id: chatView
+            ColumnLayout {
                 anchors.fill: parent
-                clip: true
-                spacing: 10
-                model: appEngine.chatMessages
+                spacing: 8
 
-                delegate: ColumnLayout {
-                    width: chatView.width
-                    //implicitHeight: bubble.implicitHeight
-                    required property string actor
-                    required property string message
-                    required property bool completed
-                    required property bool isUser
-                    required property bool isAssistant
+                Label {
+                    id: errorLabel
+                    Layout.fillWidth: true
+                    visible: root.lastChatError.length > 0
+                    text: qsTr("Error: ") + root.lastChatError
+                    wrapMode: Text.WordWrap
+                    color: palette.brightText
+                    background: Rectangle { color: palette.mid; radius: 6; opacity: 0.9 }
+                    padding: 8
+                }
 
-                    // Rectangle {
-                    //     id: bubble
-                    //     width: Math.min(chatView.width * 0.92, textItem.implicitWidth + 28)
-                    //     x: isUser ? chatView.width - width : 0
-                    //     radius: 10
-                    //     opacity: 0.95
-                    //     border.width: 1
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
 
-                    //     // Don’t hardcode colors; keep it theme-friendly
-                    //     color: isUser ? palette.base : palette.alternateBase
-                    //     border.color: palette.mid
+                    Item { Layout.fillWidth: true }
 
-                    //    ColumnLayout {
-                            //anchors.fill: parent
-                            //anchors.margins: 12
-                            spacing: 6
+                    ToolButton {
+                        id: copyChatButton
+                        text: qsTr("Copy chat")
+                        icon.name: "edit-copy"
+                        enabled: chatView.count > 0
+                        onClicked: copyChatMenu.popup(copyChatButton)
+                    }
+
+                    Menu {
+                        id: copyChatMenu
+                        MenuItem { text: qsTr("Markdown"); onTriggered: chatView.model.copyAllToClipboard(ChatMessagesModel.Markdown) }
+                        MenuItem { text: qsTr("JSON");     onTriggered: chatView.model.copyAllToClipboard(ChatMessagesModel.JSON) }
+                    }
+                }
+
+                ListView {
+                    id: chatView
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 10
+                    model: appEngine.chatMessages
+
+                    delegate: ColumnLayout {
+                        width: chatView.width
+                        required property string actor
+                        required property string message
+                        required property bool completed
+                        required property bool isUser
+                        required property bool isAssistant
+                        required property int index
+
+                        spacing: 6
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
 
                             Label {
                                 text: actor
                                 font.bold: true
                                 opacity: 0.8
+                                Layout.fillWidth: true
                             }
 
-                            TextArea {
-                                id: textItem
-                                text: message
-                                readOnly: true
-                                wrapMode: TextEdit.Wrap
-                                selectByMouse: true
-                                background: null
-                                Layout.fillWidth: true
-                                textFormat: isAssistant ? TextEdit.MarkdownText : TextEdit.PlainText
+                            ToolButton {
+                                text: qsTr("Copy")
+                                icon.name: "edit-copy"
+                                onClicked: chatView.model.copyMessageToClipboard(index)
                             }
-                        //}
-                    //}
+                        }
+
+                        TextArea {
+                            id: textItem
+                            text: message
+                            readOnly: true
+                            wrapMode: TextEdit.Wrap
+                            selectByMouse: true
+                            background: null
+                            Layout.fillWidth: true
+                            textFormat: isAssistant ? TextEdit.MarkdownText : TextEdit.PlainText
+
+                            Menu {
+                                id: msgMenu
+                                MenuItem {
+                                    text: qsTr("Copy")
+                                    onTriggered: chatView.model.copyMessageToClipboard(index)
+                                }
+                            }
+                            TapHandler {
+                                acceptedButtons: Qt.RightButton
+                                onTapped: msgMenu.popup()
+                            }
+                        }
+                    }
                 }
             }
         }
-
         // --- Prompt box + Send ---
         GroupBox {
             title: qsTr("Prompt")
@@ -177,12 +210,6 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
-
-                    // BusyIndicator {
-                    //     running: appEngine.isBusy
-                    //     visible: running
-                    // }
-
                     Button {
                         id: sendButton
                         text: qsTr("Send")
