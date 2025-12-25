@@ -10,6 +10,7 @@
 #include "ModelInfo.h"
 #include "ChatMessagesModel.h"
 #include "AvailableModelsModel.h"
+#include "LanguagesModel.h"
 
 class AudioRecorder;
 class AudioFileWriter;
@@ -29,11 +30,14 @@ class AppEngine : public QObject
     Q_PROPERTY(AvailableModelsModel *liveTranscribeModels READ liveTranscribeModels CONSTANT)
     Q_PROPERTY(AvailableModelsModel *postTranscribeModels READ postTranscribeModels CONSTANT)
     Q_PROPERTY(AvailableModelsModel *chatModels READ chatModels CONSTANT)
-
+    Q_PROPERTY(AvailableModelsModel *translationModels READ translationModels CONSTANT)
+    Q_PROPERTY(LanguagesModel* sourceLanguages READ sourceLanguages CONSTANT)
+    Q_PROPERTY(LanguagesModel* targetLanguages READ targetLanguages CONSTANT)
     Q_PROPERTY(int languageIndex READ languageIndex WRITE setLanguageIndex NOTIFY languageIndexChanged)
     Q_PROPERTY(QString chatModelName READ chatModelName() NOTIFY chatModelNameChanged)
     Q_PROPERTY(bool canPrepare READ canPrepare NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canPrepareforChat READ canPrepareForChat NOTIFY stateFlagsChanged)
+    Q_PROPERTY(bool canPrepareforTranslate READ canPrepareForTranslate NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canStart READ canStart NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canStop READ canStop NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool isBusy READ isBusy NOTIFY stateFlagsChanged)
@@ -57,6 +61,12 @@ public:
     };
     Q_ENUM(State)
 
+    enum class TranslationStyle {
+        Default,
+        Strict,
+        Natural
+    };
+
     struct Language {
         QString name; // "English"
         std::string_view whisper_language; // "en"
@@ -67,10 +77,14 @@ public:
     Q_INVOKABLE void stopRecording();
     Q_INVOKABLE void prepareForRecording();
     Q_INVOKABLE void prepareForChat();
+    Q_INVOKABLE void prepareForTranslation();
     Q_INVOKABLE void chatPrompt(const QString& prompt);
+    Q_INVOKABLE void translate(const QString& text);
     Q_INVOKABLE void saveTranscriptToFile(const QUrl &path);
     Q_INVOKABLE void reset();
     Q_INVOKABLE void startChatConversation(const QString& name);
+    Q_INVOKABLE void swapTranslationLanguages();
+    Q_INVOKABLE void copyTextToClipboard(const QString& text);
 
     AppEngine();
 
@@ -90,6 +104,15 @@ public:
     AvailableModelsModel *postTranscribeModels() {
         return &post_transcribe_models_;
     }
+    AvailableModelsModel *translationModels() {
+        return &translation_models_;
+    }
+    LanguagesModel* sourceLanguages() {
+        return &source_languages_model_;
+    }
+    LanguagesModel* targetLanguages() {
+        return &target_languages_model_;
+    }
 
     int  languageIndex() const { return language_index_; }
     QString transcribeModelName() const { return transcribe_model_name_;}
@@ -99,8 +122,10 @@ public:
     QString chatModelName() const;
     std::string getChatSystemPrompt() const;
 
+
     bool canPrepare() const;
     bool canPrepareForChat() const;
+    bool canPrepareForTranslate() const;
     bool canStart()   const;
     bool canStop()    const;
     bool isBusy()     const;
@@ -135,6 +160,7 @@ signals:
     void currentMicChanged();
     void stateTextChanged();
     void languagesChanged();
+    void translationAvailable(const QString& text);
 
 private:
     State state() const { return state_; }
@@ -160,12 +186,16 @@ private:
     void setStateText(QString text = {});
     void prepareLanguages();
     QCoro::Task<bool> sendChatPrompt(const QString& prompt);
+    QCoro::Task<bool> sendTranslatePrompt(const QString& prompt);
     void prepareAvailableModels();
 
     ChatMessagesModel chat_messages_model_;
     AvailableModelsModel chat_models_{ModelKind::GENERAL, "chat_model.selected"};
+    AvailableModelsModel translation_models_{ModelKind::GENERAL, "translation_model.selected"};
     AvailableModelsModel live_transcribe_models_{ModelKind::WHISPER, "transcribe_model.live.selected"};
     AvailableModelsModel post_transcribe_models_{ModelKind::WHISPER, "transcribe_model.post.selected"};
+    LanguagesModel source_languages_model_{"translate.source_language"};
+    LanguagesModel target_languages_model_{"translate.target_language"};
     std::shared_ptr<ChatConversation> chat_conversation_; // the current conversation
     AudioController audio_controller_;
     State state_{State::Idle};
@@ -183,6 +213,7 @@ private:
     std::shared_ptr<Transcriber> post_transcriber_;
     std::shared_ptr<ModelMgr> model_mgr_;
     std::shared_ptr<GeneralModel> chat_model_;
+    std::shared_ptr<GeneralModel> translate_model_;
     qreal recording_level_{};
     QString current_recorded_text_;
     QString state_text_;

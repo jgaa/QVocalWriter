@@ -33,6 +33,51 @@ namespace {
 //     return string{model.whisper_size};
 // }
 
+static constexpr auto translate_system_prompts = to_array<string_view>({
+    string_view{R"(You are a professional translation engine.
+
+Translate the user-provided text from {} to {}.
+
+Rules:
+- Preserve the original meaning exactly.
+- Do NOT add, remove, or explain anything.
+- Do NOT summarize or rewrite.
+- Preserve formatting, punctuation, line breaks, lists, and code blocks.
+- Keep proper names unchanged unless a standard translation exists.
+- If the input is incomplete or ungrammatical, translate it as-is.
+- Output ONLY the translated text.
+
+Do not include comments, explanations, or metadata.)"},
+    string_view{R"(ou are a strict translation system.
+
+Translate the text from {} to {}.
+
+Requirements:
+- Accuracy is more important than fluency.
+- Preserve sentence structure where possible.
+- Preserve formatting, punctuation, whitespace, and line breaks.
+- Do not paraphrase.
+- Do not normalize terminology.
+- Do not explain or annotate.
+
+If a term has no direct equivalent, transliterate or leave it unchanged.
+
+Output only the translated text.)"},
+    string_view{R"(You are a professional human translator.
+
+Translate the text from {} to {}.
+
+Guidelines:
+- Preserve the meaning and intent.
+- Use natural, idiomatic language in the target language.
+- Preserve formatting and structure.
+- Do not add new information.
+- Do not explain your choices.
+
+Output only the translated text.)"}
+});
+
+
 template <typename T>
 constexpr bool is_one_of(T value, std::initializer_list<T> list)
 {
@@ -122,9 +167,19 @@ void AppEngine::prepareForChat()
     startPrepareForChat(QString::fromUtf8(chat_models_.currentId()));
 }
 
+void AppEngine::prepareForTranslation()
+{
+
+}
+
 void AppEngine::chatPrompt(const QString &prompt)
 {
     sendChatPrompt(prompt);
+}
+
+void AppEngine::translate(const QString &text)
+{
+    sendTranslatePrompt(text);
 }
 
 QCoro::Task<bool> AppEngine::sendChatPrompt(const QString &prompt)
@@ -183,11 +238,62 @@ QCoro::Task<bool> AppEngine::sendChatPrompt(const QString &prompt)
     co_return result;
 }
 
+QCoro::Task<bool> AppEngine::sendTranslatePrompt(const QString &prompt)
+{
+    // TODO: Support different translation styles
+    const string_view system_prompt = translate_system_prompts.at(
+        static_cast<size_t>(TranslationStyle::Default));
+
+    if (!translate_model_) {
+        failed("Chat model is not prepared.");
+        co_return false;
+    }
+
+    if (!translate_model_->isLoaded()) {
+        failed ("Chat model is not loaded.");
+        co_return false;
+    }
+
+    std::array<ChatMessage, 2> messages = {
+        ChatMessage{PromptRole::System, QString::fromUtf8(system_prompt)
+                                            .arg(source_languages_model_.selectedCode())
+                                            .arg(target_languages_model_.selectedCode())
+                                            .toStdString()},
+        ChatMessage{PromptRole::User, prompt.toStdString()}
+    };
+    std::array<const ChatMessage*, 2> message_ptrs = {
+        &messages[0],
+        &messages[1]
+    };
+
+    auto formatted_prompt = translate_model_->modelInfo().formatPrompt(message_ptrs); //getMessages());
+
+    setState(State::Processing);
+
+    auto result = co_await translate_model_->prompt(std::move(formatted_prompt),
+                                                    qvw::LlamaSessionCtx::Params::Chat(true));
+
+    if (!result) {
+        failed("Translation failed.");
+        co_return false;
+    }
+
+    assert(translate_model_);
+    emit translationAvailable(QString::fromStdString(translate_model_->finalText()));
+
+    setState(State::Ready);
+    co_return result;
+}
+
 void AppEngine::prepareAvailableModels()
 {
     chat_models_.SetModels(
         ModelMgr::instance().availableModels(
             chat_models_.kind(), ModelInfo::Capability::Chat));
+
+    translation_models_.SetModels(
+        ModelMgr::instance().availableModels(
+            chat_models_.kind(), ModelInfo::Capability::Translate));
 
     live_transcribe_models_.SetModels(
         ModelMgr::instance().availableModels(
@@ -296,6 +402,11 @@ AppEngine::AppEngine() {
             this,
             &AppEngine::stateFlagsChanged);
 
+    connect(&translation_models_,
+            &AvailableModelsModel::selectedChanged,
+            this,
+            &AppEngine::stateFlagsChanged);
+
     connect(&live_transcribe_models_,
             &AvailableModelsModel::selectedChanged,
             this,
@@ -350,6 +461,11 @@ bool AppEngine::canPrepare() const
 bool AppEngine::canPrepareForChat() const
 {
     return state() == State::Idle && !chat_models_.hasSelection();
+}
+
+bool AppEngine::canPrepareForTranslate() const
+{
+    return state() == State::Idle && !translation_models_.hasSelection();
 }
 
 bool AppEngine::canStart() const

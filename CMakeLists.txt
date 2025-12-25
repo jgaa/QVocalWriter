@@ -206,6 +206,8 @@ qt_add_qml_module(${PROJECT_NAME}
           SOURCES src/app/AvailableModelsModel.h src/app/AvailableModelsModel.cpp
           QML_FILES qml/ModelPicker.qml
           QML_FILES qml/DownloadProgress.qml
+          QML_FILES qml/TranslationPane.qml
+          SOURCES src/app/LanguagesModel.h src/app/LanguagesModel.cpp
 )
 
 # Add includepaths
