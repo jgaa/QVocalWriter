@@ -85,6 +85,7 @@ public:
     Q_INVOKABLE void startChatConversation(const QString& name);
     Q_INVOKABLE bool swapTranslationLanguages();
     Q_INVOKABLE static void copyTextToClipboard(const QString& text);
+    Q_INVOKABLE QString aboutText() const;
 
     AppEngine();
 
@@ -141,6 +142,8 @@ public:
     }
 
     ChatMessagesModel* chatMessages() { return &chat_messages_model_; }
+
+    static void initLogging();
 
 signals:
     void stateChanged(AppEngine::State newState);

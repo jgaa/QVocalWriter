@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 
+
 project(QVocalWriter VERSION 0.1.0 LANGUAGES CXX)
+
+add_definitions(-DAPP_VERSION=\"${CMAKE_PROJECT_VERSION}\")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -208,6 +211,10 @@ qt_add_qml_module(${PROJECT_NAME}
           QML_FILES qml/DownloadProgress.qml
           QML_FILES qml/TranslationPane.qml
           SOURCES src/app/LanguagesModel.h src/app/LanguagesModel.cpp
+          QML_FILES qml/AboutDlg.qml
+          QML_FILES qml/settings/SettingsDlg.qml
+          QML_FILES qml/settings/GeneralSettings.qml
+          QML_FILES qml/common.js
 )
 
 # Add includepaths

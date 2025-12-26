@@ -42,16 +42,13 @@ int main(int argc, char *argv[])
 
     // Set up a log-handler to stdout
     // TODO: Make this configurable via command-line arguments or config file
-    logfault::LogManager::Instance().AddHandler(make_unique<logfault::StreamHandler>(clog, logfault::LogLevel::DEBUGGING));
-    LFLOG_INFO << "Logging to std::clog is enabled";
+    // logfault::LogManager::Instance().AddHandler(make_unique<logfault::StreamHandler>(clog, logfault::LogLevel::DEBUGGING));
+    // LFLOG_INFO << "Logging to std::clog is enabled";
 
-    if (const auto& log_file = settings.value("logging/log_file", "/tmp/qvocalwriter.log").toString(); !log_file.isEmpty()) {
-        const auto log_level = settings.value("logging/log_level", "trace").toString();
-        if (const auto level = toLogLevel(log_level.toStdString()); level.has_value()) {
-                logfault::LogManager::Instance().AddHandler(make_unique<logfault::StreamHandler>(log_file.toStdString(),*level, true));
-                LOG_INFO_N << "Logging to file '" << log_file;
-        }
-    }
+    AppEngine::initLogging();
+
+    LOG_INFO << "Starting QVocalWriter " << APP_VERSION;
+    LOG_INFO << "Configuration from '" << settings.fileName() << "'";
 
     AppEngine app_engine;
 

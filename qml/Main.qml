@@ -5,6 +5,8 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import QVocalWriter
 
+import "common.js" as Common
+
 Window {
     id: root
     visible: true
@@ -96,6 +98,38 @@ Window {
 
                     Item {
                         Layout.fillHeight: true
+                    }
+
+                    // Optional divider above the bottom buttons
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: "#40ffffff"
+                        opacity: 0.6
+                    }
+
+                    Button {
+                        Layout.fillWidth: true
+                        text: "⚙️  " + qsTr("Settings")
+                        onClicked: {
+                            Common.openDialog("settings/SettingsDlg.qml", root)
+                        }
+                    }
+
+                    // GitHub
+                    Button {
+                        Layout.fillWidth: true
+                        text: "🐙  " + qsTr("GitHub")
+                        onClicked: Qt.openUrlExternally("https://github.com/jgaa/QVocalWriter")
+                    }
+
+                    // About
+                    Button {
+                        Layout.fillWidth: true
+                        text: "ℹ️  " + qsTr("About")
+                        onClicked: {
+                            Common.openDialog("AboutDlg.qml", root)
+                        }
                     }
                 }
             }

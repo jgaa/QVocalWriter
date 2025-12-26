@@ -365,6 +365,65 @@ void AppEngine::copyTextToClipboard(const QString &text)
     }
 }
 
+QString AppEngine::aboutText() const
+{
+     return tr(R"(**QVocalWriter** is a cross-platform, privacy-focused application for working with speech and text.
+It combines **transcription**, **translation**, and **assistant-based chat** in a modular design
+focused on long-form work and local models.
+
+This is QVocalWriter version: %1, using Qt version: %2 (GPL license).
+
+## Overview
+
+QVocalWriter started as a speech-to-text tool for long-form writing and has evolved into a flexible
+toolkit for language workflows.
+
+The application emphasizes:
+
+- **Privacy**: All processing is done locally on your machine.
+- **Modularity**: Choose which models and features to use.
+- **Flexibility**: You can run models of varying sizes based on your hardware.
+
+## Features
+
+### Transcription
+Convert speech to structured text, suitable for long recordings. The app can show live transcription while
+you record, and supports post-processing for improved accuracy. Once the recording is complete, the app can
+translate and/or send the text to a chat assistant for further refinement. Pre-defined prompts help guide the assistant
+to make a:
+
+- Blog post
+- Email
+- Social media posts (Linkedin, Reddit, Facebook, etc)
+- Technical documentation
+- Meeting notes
+- Structured plans from inspired rambling
+- Creative writing (stories, poems, scripts)
+- Conservative, but cleand up text from the raw transcription (for example medical or legal memos)
+
+*Remember that AI models does not always produce accurate results, so review and edit the output as needed.*
+
+### Translation
+Translate text or transcriptions between languages using local models.
+
+### Assistant Chat
+Interact with language models for drafting, rewriting, research and exploration.
+
+## Technical Information
+
+- Built with **Qt 6 (C++ / QML)**
+- Cross-platform: Linux, Windows, macOS
+- Typical memory usage: < 100 MB before loading models
+- License: GPL3
+
+## Credits
+
+Developed by **Jarle Aase**, [The Last Viking LTD](https://lastviking.eu/)
+© 2025
+)").arg(APP_VERSION).arg(qVersion());
+
+}
+
 AppEngine::AppEngine() {
     QSettings settings{};
 
@@ -517,6 +576,34 @@ bool AppEngine::canStop() const
 bool AppEngine::isBusy() const
 {
     return stateIn({State::Processing, State::Preparing});
+}
+
+void AppEngine::initLogging()
+{
+    QSettings settings{};
+
+    if (!settings.contains("logging/applevel")) {
+        settings.setValue("logging/applevel", 4); // INFO
+    }
+
+#ifdef Q_OS_LINUX
+    if (const auto level = settings.value("logging/applevel", 4).toInt()) {
+        logfault::LogManager::Instance().AddHandler(
+            make_unique<logfault::StreamHandler>(clog, static_cast<logfault::LogLevel>(level)));
+        LOG_INFO << "Logging to console";
+    }
+#endif
+
+    auto level = settings.value("logging/level", 0).toInt();
+    if (level > 0) {
+        if (auto path = settings.value("logging/path", "").toString().toStdString(); !path.empty()) {
+            const bool prune = settings.value("logging/prune", "").toString() == "true";
+            logfault::LogManager::Instance().AddHandler(
+                make_unique<logfault::StreamHandler>(path, static_cast<logfault::LogLevel>(level), prune));
+
+            LOG_INFO << "Logging to: " << path;
+        }
+    }
 }
 
 void AppEngine::setLanguageIndex(int index)
