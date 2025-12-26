@@ -50,7 +50,7 @@ public:
     // Convenience helpers
     Q_INVOKABLE int indexOfCode(const QString& code) const noexcept;
     Q_INVOKABLE void selectByCode(const QString& code);
-    Q_INVOKABLE QString showAuto(bool show); // Difference between source and destination languages
+    Q_INVOKABLE void showAuto(bool show); // Difference between source and destination languages
 
 signals:
     void selectedChanged();

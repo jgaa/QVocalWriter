@@ -180,7 +180,7 @@ void LanguagesModel::selectByCode(const QString& code)
     if (idx >= 0) setSelected(idx);
 }
 
-QString LanguagesModel::showAuto(bool show)
+void LanguagesModel::showAuto(bool show)
 {
     assert(!entries_.empty());
     const bool have_auto = (indexOfCode("auto") >= 0);
