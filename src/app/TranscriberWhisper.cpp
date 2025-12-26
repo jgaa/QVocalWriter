@@ -286,7 +286,7 @@ void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastCh
     emit partialTextAvailable(full_text);
 
     if (lastChunk) {
-        final_text_ = full_text;
+        final_text_ = full_text.toStdString();
         LOG_DEBUG_EX(*this) << "Final text:" << final_text_;
         //emit finalTextAvailable(final_text_);
     }
@@ -333,13 +333,13 @@ bool TranscriberWhisper::processRecording(std::span<const float> data)
     // Get all the returned test into final_text_
     final_text_.clear();
     for(const auto segment: transcript_out.segments){
-        final_text_ += QString::fromUtf8(segment.text.c_str());
+        final_text_ += segment.text;
     }
 
-    if (config().submit_filal_text) {
-        LOG_TRACE_EX(*this) << "Emitting final text:" << final_text_;
-        emit Model::finalTextAvailable(final_text_);
-    }
+    // if (config().submit_filal_text) {
+    //     LOG_TRACE_EX(*this) << "Emitting final text:" << final_text_;
+    //     emit Model::finalTextAvailable(QString::final_text_);
+    // }
 
     return true;
 }

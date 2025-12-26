@@ -309,6 +309,18 @@ void AppEngine::prepareAvailableModels()
     post_transcribe_models_.SetModels(
         ModelMgr::instance().availableModels(
             post_transcribe_models_.kind(), ModelInfo::Capability::Transcribe));
+
+    doc_prepare_models_.SetModels(
+        ModelMgr::instance().availableModels(
+            doc_prepare_models_.kind(), ModelInfo::Capability::Rewrite));
+}
+
+void AppEngine::setRecordedText(const QString text)
+{
+    if (current_recorded_text_ != text) {
+        current_recorded_text_ = std::move(text);
+        emit recordedTextChanged();
+    }
 }
 
 void AppEngine::saveTranscriptToFile(const QUrl &path)
@@ -511,6 +523,13 @@ AppEngine::AppEngine() {
             &AvailableModelsModel::selectedChanged,
             this,
             &AppEngine::stateFlagsChanged);
+
+    connect(&doc_prepare_models_,
+            &AvailableModelsModel::selectedChanged,
+            this,
+            &AppEngine::stateFlagsChanged);
+
+
 }
 
 QStringList AppEngine::microphones() const
@@ -756,6 +775,9 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
 {
     // Live transcriber.Optional.
     assert(rec_transcriber_ == nullptr);
+
+    const bool have_rewrite_step = rewrite_style_.hasSelection() && doc_prepare_models_.hasSelection();
+
     const auto whisper_models = ModelMgr::instance().availableModels(ModelKind::WHISPER, ModelInfo::Capability::Transcribe);
     if (live_transcribe_models_.hasSelection()) {
         const auto qid = QString::fromUtf8(post_transcribe_models_.currentId());
@@ -769,7 +791,7 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
                     *model,
                     language.whisper_language,
                     true, // Load the live transcriber so it reacts faster when we start recording
-                    !post_transcribe_models_.hasSelection() // Submit final text?
+                    !have_rewrite_step && !post_transcribe_models_.hasSelection() // Submit final text?
                     ); !rec_transcriber_) {
                 co_return failed(tr("Failed to prepare live transcriber %1").arg(qid));
             }
@@ -777,6 +799,8 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
         } else {
             co_return failed(tr("Transcription model not found: %1").arg(qid));
         }
+    } else {
+        rec_transcriber_.reset();
     }
 
     // same with post_transcriber_ and transcribe_post_model_name_
@@ -792,7 +816,7 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
                     *model,
                     language.whisper_language,
                     true, // Load the live transcriber so it reacts faster when we start recording
-                    true // Submit final text?
+                    !have_rewrite_step // Submit final text?
                     ); !rec_transcriber_) {
                 co_return failed(tr("Failed to prepare post-transcriber %1").arg(qid));
             }
@@ -800,6 +824,25 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
         } else {
             co_return failed(tr("Transcription model not found: %1").arg(qid));
         }
+    } else  {
+        post_transcriber_.reset();
+    }
+
+    if (have_rewrite_step) {
+        const auto qid = QString::fromUtf8(doc_prepare_models_.currentId());
+        if (auto model = ModelMgr::instance().findModelById(ModelKind::GENERAL, qid); model) {
+
+            LOG_DEBUG_N << "Preparing document rewrite model: " << qid;
+            doc_prepare_model_ = co_await prepareGeneralModel(
+                "doc-rewrite-model",
+                *model,
+                false // Load it later
+                );
+        } else {
+            co_return failed(tr("Doc rewrite model not found: %1").arg(qid));
+        }
+    } else {
+        doc_prepare_model_.reset();
     }
 
     setState(State::Ready);
@@ -855,8 +898,7 @@ QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareTranscriber(
         this,
         [this](const QString &text) {
             LOG_TRACE_N << "Partial text available: " << text;
-            current_recorded_text_ = text;
-            emit recordedTextChanged();
+            setRecordedText(text);
         }
     );
 
@@ -870,16 +912,16 @@ QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareTranscriber(
         }
     );
 
-    if (submitFilalText) {
-        // Relay final text signal
-        LOG_TRACE_N << "Connecting finalTextAvailable signal for transcriber: " << name;
-        connect(transcriber.get(),
-                &Model::finalTextAvailable,
-                [this](const QString &text) {
-                    LOG_TRACE_N << "Final text available: " << text;
-                    onFinalRecordingTextAvailable(text);
-                });
-    }
+    // if (submitFilalText) {
+    //     // Relay final text signal
+    //     LOG_TRACE_N << "Connecting finalTextAvailable signal for transcriber: " << name;
+    //     connect(transcriber.get(),
+    //             &Model::finalTextAvailable,
+    //             [this](const QString &text) {
+    //                 LOG_TRACE_N << "Final text available: " << text;
+    //                 onFinalRecordingTextAvailable(text);
+    //             });
+    // }
 
 
     co_await transcriber->init(model_id);
@@ -894,8 +936,7 @@ QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareTranscriber(
 void AppEngine::onFinalRecordingTextAvailable(const QString &text)
 {
     LOG_INFO_N << "Final text available: " << text.toStdString();
-    current_recorded_text_ = text;
-    emit recordedTextChanged();
+    setRecordedText(text);
 }
 
 QCoro::Task<void> AppEngine::transcribeChunks()
@@ -910,7 +951,13 @@ QCoro::Task<void> AppEngine::transcribeChunks()
 
 QCoro::Task<void> AppEngine::onRecordingDone()
 {
+    // TODO: Don't unload models if they are re-used later
     LOG_DEBUG_N << "Recording done, starting post-processing transcription if needed";
+
+    if (rec_transcriber_ && rec_transcriber_->isLoaded()) {
+        rec_transcriber_->unloadModel();
+    }
+
     if (post_transcriber_) {
         LOG_DEBUG_N << "Stopping live transcriber before post-processing";
         if (rec_transcriber_) {
@@ -929,6 +976,54 @@ QCoro::Task<void> AppEngine::onRecordingDone()
         }
     }
 
+    if (post_transcriber_ && post_transcriber_->isLoaded()) {
+        post_transcriber_ ->unloadModel();
+    }
+
+    string transcript = post_transcriber_ ? post_transcriber_->finalText() : rec_transcriber_->finalText();
+    QString final_text;
+
+    if (doc_prepare_model_) {
+        assert(rewrite_style_.hasSelection());
+        LOG_DEBUG_N << "Starting document preparation rewrite";
+        setState(State::Processing);
+
+        if (!doc_prepare_model_->isLoaded()) {
+            co_await doc_prepare_model_->loadModel();
+        }
+
+        string formatted_prompt;
+        {
+            const auto prompt = rewrite_style_.makePrompt();
+
+            const array<ChatMessage, 2> msgs = {ChatMessage{PromptRole::System, prompt.toStdString()},
+                                          {PromptRole::User, std::move(transcript)}};
+
+            array<const ChatMessage*, 2> message_ptrs = {&msgs[0], &msgs[1]};
+
+            formatted_prompt = doc_prepare_model_->modelInfo().formatPrompt(message_ptrs);
+
+            LOG_TRACE_N << "Document rewrite formatted prompt: " << formatted_prompt;
+        }
+
+        auto result = co_await doc_prepare_model_->prompt(std::move(formatted_prompt),
+                                                          qvw::LlamaSessionCtx::Params::Balanced());
+
+        if (!result) {
+            failed("Rewrite failed.");
+            co_return;
+        }
+
+        final_text = QString::fromStdString(doc_prepare_model_->finalText());
+    }
+
+    if (final_text.isEmpty()) {
+        final_text = QString::fromUtf8(transcript);
+    }
+
+    // TODO: Add translation from final_text
+
+    setRecordedText(final_text);
     setState(State::Done);
 }
 
@@ -966,9 +1061,8 @@ QCoro::Task<void> AppEngine::doReset()
     recorder_.reset();
     chunk_queue_.reset();
 
-    current_recorded_text_.clear();
+    setRecordedText({});
     setState(State::Idle);
-    emit recordedTextChanged();
     LOG_TRACE_N << "Reset done";
 }
 

@@ -91,7 +91,7 @@ Item {
             spacing: 8
 
             Label {
-                text: qsTr("Recording Model")
+                text: qsTr("Live transcribe Model")
                 Layout.alignment: Qt.AlignVCenter
             }
 
@@ -106,13 +106,68 @@ Item {
             spacing: 8
 
             Label {
-                text: qsTr("Post processing Model")
+                text: qsTr("Post transcription Model")
                 Layout.alignment: Qt.AlignVCenter
             }
 
             ModelPicker {
                 Layout.fillWidth: true
                 model: appEngine.postTranscribeModels
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Label {
+                text: qsTr("Document preparation model")
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            ModelPicker {
+                id: docPrepareModelPicker
+                Layout.fillWidth: true
+                model: appEngine.docPrepareModels
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+            visible: docPrepareModelPicker.model.hasSelection
+
+            Label {
+                text: qsTr("Rewrite style")
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            ComboBox {
+                id: rewriteStyleCombo
+                Layout.fillWidth: true
+                model: appEngine.rewriteStyle
+                textRole: "name"
+                //valueRole: "kind"
+                currentIndex: model.selected
+                onCurrentIndexChanged: model.selected = currentIndex
+            }
+
+            ComboBox {
+                id: socialMediaType
+                Layout.fillWidth: rewriteStyleCombo
+                visible: rewriteStyleCombo.model.isSocialMedia
+                model: [
+                           "X/Twitter",
+                           "Linkedin",
+                           "Reddit",
+                           "Facebook",
+                           "Instagram",
+                           "TikTok",
+                           qsTr("Work/intranet"),
+                           qsTr("Generic")
+                       ]
+                editable: true
+                onCurrentIndexChanged: rewriteStyleCombo.model.socialMedia = currentText
             }
         }
 

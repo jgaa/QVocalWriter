@@ -17,7 +17,7 @@ public:
 
     QCoro::Task<bool> prompt(std::string text, const qvw::LlamaSessionCtx::Params& params);
 
-    const std::string& finalText() const noexcept {
+    const std::string& finalText() const noexcept override {
         return final_text_;
     }
 

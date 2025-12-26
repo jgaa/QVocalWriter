@@ -33,6 +33,10 @@ public:
         return ModelKind::WHISPER;
     }
 
+    const std::string& finalText() const noexcept override {
+        return final_text_;
+    }
+
 protected:
     bool createContextImpl() override;
     void processChunk(std::span<const uint8_t> data, bool lastChunk) override;
@@ -68,7 +72,7 @@ private:
     float last_emitted_end_time_ms_ = 0.0f; // last segment end time we emitted
 
     // Transcript accumulation
-    QString final_text_;
+    std::string final_text_;
     float   stable_until_ms_ = 0.0f; // global time up to which text is stable
 
     // streaming config

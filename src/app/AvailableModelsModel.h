@@ -15,6 +15,7 @@ class AvailableModelsModel : public QAbstractListModel
 
     Q_PROPERTY(int selected READ selected WRITE setSelected NOTIFY selectedChanged)
     Q_PROPERTY(QString selectedName READ selectedModelName() NOTIFY selectedChanged)
+    Q_PROPERTY(bool hasSelection READ hasSelection NOTIFY selectedChanged)
 public:
     enum class Roles {
         Name = Qt::UserRole + 1,

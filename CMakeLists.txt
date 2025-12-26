@@ -147,6 +147,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Quick Qml Multimedia)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 find_package(Qt6 REQUIRED COMPONENTS Core)
+find_package(Qt6 REQUIRED COMPONENTS Core Quick)
 
 qt_standard_project_setup(REQUIRES 6.4)
 
@@ -159,6 +160,7 @@ qt_add_executable(${PROJECT_NAME}
 target_link_libraries(QVocalWriter PRIVATE Qt6::Core)
 target_link_libraries(QVocalWriter PRIVATE Qt6::Core)
 target_link_libraries(QVocalWriter PRIVATE Qt6::Core)
+target_link_libraries(QVocalWriter PRIVATE Qt6::Core Qt6::Quick)
 set(QML_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -215,6 +217,7 @@ qt_add_qml_module(${PROJECT_NAME}
           QML_FILES qml/settings/SettingsDlg.qml
           QML_FILES qml/settings/GeneralSettings.qml
           QML_FILES qml/common.js
+          SOURCES src/app/RewriteStyleModel.h src/app/RewriteStyleModel.cpp
 )
 
 # Add includepaths

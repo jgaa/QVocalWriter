@@ -11,6 +11,7 @@
 #include "ChatMessagesModel.h"
 #include "AvailableModelsModel.h"
 #include "LanguagesModel.h"
+#include "RewriteStyleModel.h"
 
 class AudioRecorder;
 class AudioFileWriter;
@@ -30,9 +31,11 @@ class AppEngine : public QObject
     Q_PROPERTY(AvailableModelsModel *liveTranscribeModels READ liveTranscribeModels CONSTANT)
     Q_PROPERTY(AvailableModelsModel *postTranscribeModels READ postTranscribeModels CONSTANT)
     Q_PROPERTY(AvailableModelsModel *chatModels READ chatModels CONSTANT)
+    Q_PROPERTY(AvailableModelsModel *docPrepareModels READ docPrepareModels CONSTANT)
     Q_PROPERTY(AvailableModelsModel *translationModels READ translationModels CONSTANT)
     Q_PROPERTY(LanguagesModel* sourceLanguages READ sourceLanguages CONSTANT)
     Q_PROPERTY(LanguagesModel* targetLanguages READ targetLanguages CONSTANT)
+    Q_PROPERTY(RewriteStyleModel *rewriteStyle READ rewriteStyle CONSTANT)
     Q_PROPERTY(int languageIndex READ languageIndex WRITE setLanguageIndex NOTIFY languageIndexChanged)
     Q_PROPERTY(QString chatModelName READ chatModelName() NOTIFY chatModelNameChanged)
     Q_PROPERTY(bool canPrepare READ canPrepare NOTIFY stateFlagsChanged)
@@ -114,6 +117,12 @@ public:
     LanguagesModel* targetLanguages() {
         return &target_languages_model_;
     }
+    AvailableModelsModel* docPrepareModels() {
+        return &doc_prepare_models_;;
+    }
+    RewriteStyleModel* rewriteStyle() {
+        return &rewrite_style_;
+    }
 
     int  languageIndex() const { return language_index_; }
     QString transcribeModelName() const { return transcribe_model_name_;}
@@ -192,14 +201,17 @@ private:
     QCoro::Task<bool> sendChatPrompt(const QString& prompt);
     QCoro::Task<bool> sendTranslatePrompt(const QString& prompt);
     void prepareAvailableModels();
+    void setRecordedText(const QString text);
 
     ChatMessagesModel chat_messages_model_;
     AvailableModelsModel chat_models_{ModelKind::GENERAL, "chat_model.selected"};
     AvailableModelsModel translation_models_{ModelKind::GENERAL, "translation_model.selected"};
     AvailableModelsModel live_transcribe_models_{ModelKind::WHISPER, "transcribe_model.live.selected"};
     AvailableModelsModel post_transcribe_models_{ModelKind::WHISPER, "transcribe_model.post.selected"};
+    AvailableModelsModel doc_prepare_models_{ModelKind::GENERAL, "doc_prepare_model.selected"};
     LanguagesModel source_languages_model_{"translate.source_language"};
     LanguagesModel target_languages_model_{"translate.target_language"};
+    RewriteStyleModel rewrite_style_{"transcribe.doc.rewrite_style"};
     std::shared_ptr<ChatConversation> chat_conversation_; // the current conversation
     AudioController audio_controller_;
     State state_{State::Idle};
@@ -218,6 +230,7 @@ private:
     std::shared_ptr<ModelMgr> model_mgr_;
     std::shared_ptr<GeneralModel> chat_model_;
     std::shared_ptr<GeneralModel> translate_model_;
+    std::shared_ptr<GeneralModel> doc_prepare_model_;
     qreal recording_level_{};
     QString current_recorded_text_;
     QString state_text_;

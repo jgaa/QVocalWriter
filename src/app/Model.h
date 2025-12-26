@@ -118,6 +118,7 @@ public:
     Model& operator=(const Model&&) = delete;
 
     virtual ModelKind kind() const noexcept  = 0;
+    virtual const std::string& finalText() const noexcept = 0;
     QCoro::Task<bool> init(const QString &modelId);
     QCoro::Task<bool> loadModel();
     QCoro::Task<bool> unloadModel();
