@@ -42,6 +42,10 @@ public:
     void setSelectedCode(const QString& code);
 
     QString selectedCode() const;
+    QString selectedName() const;
+    bool autoIsSelected() const;
+    bool haveSelection() const noexcept { return !selected_code_.isEmpty(); }
+
 
     // Convenience helpers
     Q_INVOKABLE int indexOfCode(const QString& code) const noexcept;

@@ -13,7 +13,7 @@ using namespace std;
 namespace {
 
 static const auto defaultLanguages = to_array<LanguagesModel::Entry>({
-        { "Auto detect", "auto", "" },
+        { "[Auto detect]", "auto", "" },
 
         // ---- EU languages ----
         { "Bulgarian", "bg", "Български" },
@@ -67,8 +67,17 @@ LanguagesModel::LanguagesModel(const QString& settingsKey, QObject *parent)
     auto lngs = std::vector<Entry>(defaultLanguages.begin(), defaultLanguages.end());
     // Sort
     std::sort(lngs.begin(), lngs.end(), [](const Entry& a, const Entry& b) {
+        // always keep "auto" first
+        if (a.code.compare("auto", Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+        if (b.code.compare("auto", Qt::CaseInsensitive) == 0) {
+            return false;
+        }
         return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
     });
+
+    entries_ = std::move(lngs);
 
     loadSelection();
 }
@@ -138,6 +147,21 @@ QString LanguagesModel::selectedCode() const
 {
     return selected_code_;
 }
+
+QString LanguagesModel::selectedName() const
+{
+    const auto entry = findEntryByCode(selected_code_);
+    if (entry) {
+        return entry->name;
+    }
+    return {};
+}
+
+bool LanguagesModel::autoIsSelected() const
+{
+    return selected_code_.compare("auto", Qt::CaseInsensitive) == 0;
+}
+
 
 int LanguagesModel::indexOfCode(const QString& code) const noexcept
 {

@@ -115,15 +115,9 @@ Window {
                 }
 
                 // 1: TRANSLATE (placeholder for now)
-                Item {
+                TranslationPane {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: qsTr("Translate view (coming soon)")
-                        color: "gray"
-                    }
                 }
 
                 // 2: INTERACTIVE (placeholder for now)

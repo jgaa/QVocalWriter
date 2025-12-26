@@ -9,6 +9,8 @@
 #include <QSettings>
 #include <QTimer>
 #include <QCollator>
+#include <QClipboard>
+#include <QGuiApplication>
 
 #include "AppEngine.h"
 #include "AudioRecorder.h"
@@ -36,7 +38,7 @@ namespace {
 static constexpr auto translate_system_prompts = to_array<string_view>({
     string_view{R"(You are a professional translation engine.
 
-Translate the user-provided text from {} to {}.
+Translate the user-provided text %1 to %2.
 
 Rules:
 - Preserve the original meaning exactly.
@@ -50,7 +52,7 @@ Rules:
 Do not include comments, explanations, or metadata.)"},
     string_view{R"(ou are a strict translation system.
 
-Translate the text from {} to {}.
+Translate the text %1 to %2.
 
 Requirements:
 - Accuracy is more important than fluency.
@@ -65,7 +67,7 @@ If a term has no direct equivalent, transliterate or leave it unchanged.
 Output only the translated text.)"},
     string_view{R"(You are a professional human translator.
 
-Translate the text from {} to {}.
+Translate the text %1 to %2.
 
 Guidelines:
 - Preserve the meaning and intent.
@@ -169,7 +171,7 @@ void AppEngine::prepareForChat()
 
 void AppEngine::prepareForTranslation()
 {
-
+    startPrepareForTranslation();
 }
 
 void AppEngine::chatPrompt(const QString &prompt)
@@ -254,10 +256,15 @@ QCoro::Task<bool> AppEngine::sendTranslatePrompt(const QString &prompt)
         co_return false;
     }
 
+    // Don't specify source language if auto
+    const auto from_phhrase = source_languages_model_.autoIsSelected()
+                            ? QString{}
+                            : QString{"from %1"}.arg(source_languages_model_.selectedName());
+
     std::array<ChatMessage, 2> messages = {
         ChatMessage{PromptRole::System, QString::fromUtf8(system_prompt)
-                                            .arg(source_languages_model_.selectedCode())
-                                            .arg(target_languages_model_.selectedCode())
+                                            .arg(from_phhrase)
+                                            .arg(target_languages_model_.selectedName())
                                             .toStdString()},
         ChatMessage{PromptRole::User, prompt.toStdString()}
     };
@@ -327,6 +334,35 @@ void AppEngine::startChatConversation(const QString &name)
     chat_conversation_ = make_shared<ChatConversation>(name);
     chat_conversation_->setModel(&chat_messages_model_);
     chat_conversation_->addMessage(make_shared<ChatMessage>(PromptRole::System, getChatSystemPrompt()));
+}
+
+bool AppEngine::swapTranslationLanguages()
+{
+    if (source_languages_model_.autoIsSelected()) {
+        LOG_WARN_N << "Cannot swap languages when source is auto";
+        return false;
+    }
+
+    if (!source_languages_model_.haveSelection() || !target_languages_model_.haveSelection()) {
+        LOG_WARN_N << "Cannot swap languages when one side has no selection";
+        return false;
+    }
+
+    const auto a = source_languages_model_.selectedCode();
+    const auto b = target_languages_model_.selectedCode();
+
+    source_languages_model_.setSelectedCode(b);
+    target_languages_model_.setSelectedCode(a);
+    return true;
+}
+
+void AppEngine::copyTextToClipboard(const QString &text)
+{
+    if (auto *clipb = QGuiApplication::clipboard()) {
+        clipb->setText(text);
+    } else {
+        LOG_WARN_N << "Clipboard not available";
+    }
 }
 
 AppEngine::AppEngine() {
@@ -601,6 +637,31 @@ QCoro::Task<void> AppEngine::startPrepareForChat(QString id)
 
     setState(State::Ready);
 
+    co_return;
+}
+
+QCoro::Task<void> AppEngine::startPrepareForTranslation()
+{
+    LOG_INFO_N << "Preparing for translation with model: " << translation_models_.currentId();
+    setStateText(tr("Preparing translation model..."));
+
+    auto mi = ModelMgr::instance().findModelById(
+        ModelKind::GENERAL,
+        QString::fromUtf8(translation_models_.currentId())
+        );
+
+    if (!mi) {
+        failed(tr("Translation model not found: %1").arg(translation_models_.currentId()));
+        co_return;
+    }
+    assert(mi);
+    translate_model_ = co_await prepareGeneralModel(
+        "translation-model",
+        *mi,
+        true // Load it
+        );
+
+    setState(State::Ready);
     co_return;
 }
 

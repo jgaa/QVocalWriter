@@ -83,8 +83,8 @@ public:
     Q_INVOKABLE void saveTranscriptToFile(const QUrl &path);
     Q_INVOKABLE void reset();
     Q_INVOKABLE void startChatConversation(const QString& name);
-    Q_INVOKABLE void swapTranslationLanguages();
-    Q_INVOKABLE void copyTextToClipboard(const QString& text);
+    Q_INVOKABLE bool swapTranslationLanguages();
+    Q_INVOKABLE static void copyTextToClipboard(const QString& text);
 
     AppEngine();
 
@@ -168,6 +168,7 @@ private:
     void createPipelineIfNeeded();
     QCoro::Task<void> startPrepareForRecording();
     QCoro::Task<void> startPrepareForChat(QString modelName);
+    QCoro::Task<void> startPrepareForTranslation();
     QCoro::Task<bool> prepareTranscriberModels();
     QCoro::Task<std::shared_ptr<Transcriber>> prepareTranscriber(std::string name,
                                                            ModelInfo modelInfo,
