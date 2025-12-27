@@ -6,6 +6,8 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QSettings>
+#include <QStandardPaths>
+
 
 #include "AppEngine.h"
 #include "logging.h"
@@ -49,6 +51,10 @@ int main(int argc, char *argv[])
 
     LOG_INFO << "Starting QVocalWriter " << APP_VERSION;
     LOG_INFO << "Configuration from '" << settings.fileName() << "'";
+
+    if (!settings.value("models/path").isValid() || settings.value("models/path").toString().trimmed().isEmpty()) {
+        settings.setValue("models/path", QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/models");
+    }
 
     AppEngine app_engine;
 

@@ -16,6 +16,7 @@ ScrollView {
         settings.setValue("logging/level", logLevelFile.currentIndex.toString())
         settings.setValue("logging/applevel", logLevelApp.currentIndex.toString())
         settings.setValue("logging/prune", prune.checked ? "true" : "false")
+        settings.setValue("models/path", modelPath.text)
         settings.sync()
     }
 
@@ -84,8 +85,28 @@ ScrollView {
             text: qsTr("Prune log-file when starting")
             checked: settings.value("logging/prune") === "true"
         }
+
+        Label { text: qsTr("Models path")}
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: logPath.implicitHeight + 16
+            radius: 6
+            border.width: 1
+            border.color: palette.mid
+            color: palette.base
+
+            TextInput {
+                id: modelPath
+                anchors.fill: parent
+                anchors.margins: 8
+                verticalAlignment: TextInput.AlignVCenter
+                color: palette.text
+                text: settings.value("models/path", "")
+            }
+        }
         Item {
             Layout.fillHeight: true
         }
+        Item {}
     }
 }

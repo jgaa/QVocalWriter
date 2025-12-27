@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QFuture>
+#include <QSettings>
 
 #include <qcorofuture.h>
 
@@ -391,9 +392,15 @@ QCoro::Task<bool> ModelMgr::makeAvailable(ModelKind kind, const ModelInfo &model
 
 std::filesystem::path ModelMgr::findModelPath(ModelKind kind, const ModelInfo &modelInfo) const
 {
-    filesystem::path model_dir =  QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation).toStdString();
+    auto base = QSettings{}.value("models/path", "").toString().trimmed();
+    if (base.isEmpty()) {
+        base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/models";
+    }
+
+    filesystem::path model_dir = base.toStdString();
     model_dir /= dirPrefix(kind);
 
+    LOG_TRACE_N << "Base model directory: " << model_dir;
     if (!filesystem::is_directory(model_dir)) {
         LOG_INFO_N << "Creating model directory: " << model_dir;
         filesystem::create_directories(model_dir);
