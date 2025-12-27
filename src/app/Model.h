@@ -119,13 +119,13 @@ public:
 
     virtual ModelKind kind() const noexcept  = 0;
     virtual const std::string& finalText() const noexcept = 0;
-    QCoro::Task<bool> init(const QString &modelId);
-    QCoro::Task<bool> loadModel();
-    QCoro::Task<bool> unloadModel();
+    [[nodiscard]] QCoro::Task<bool> init(const QString &modelId);
+    [[nodiscard]] QCoro::Task<bool> loadModel();
+    [[nodiscard]] QCoro::Task<bool> unloadModel();
 
     void cancel();
     void reset();
-    QCoro::Task<void> stop();
+    [[nodiscard]] QCoro::Task<void> stop();
 
     bool isCancelled() const noexcept { return state() >= State::STOPPING;}
     bool haveModel() const noexcept { return model_instance_ != nullptr; }

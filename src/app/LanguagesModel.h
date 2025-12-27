@@ -29,7 +29,7 @@ public:
         QString nativeName; // optional, e.g. "English", "Български"
     };
 
-    explicit LanguagesModel(const QString& settingsKey, QObject *parent = nullptr);
+    explicit LanguagesModel(const QString& settingsKey, bool showAuto = true, QObject *parent = nullptr);
 
     // Model API
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;

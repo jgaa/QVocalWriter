@@ -56,6 +56,25 @@ public:
             return p;
         }
 
+        /// Translation (final pass, strictly faithful)
+        static Params TranslateStrict(int maxTokens = 1024)
+        {
+            Params p;
+            p.max_tokens     = maxTokens;
+
+            // Strongly reduce creativity
+            p.temperature    = 0.15f;
+
+            // Limit candidate set to reduce paraphrasing
+            p.top_k          = 20;
+            p.top_p          = 0.85f;
+
+            // Slightly discourage repetition loops, but not enough to rephrase
+            p.repeat_penalty = 1.15f;
+
+            return p;
+        }
+
         /// Deterministic / factual / cleanup tasks
         /// (summaries, transcription cleanup, code, Q&A)
         static Params Deterministic(int maxTokens = 256) {

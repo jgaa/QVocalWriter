@@ -35,6 +35,10 @@ public:
         return true;
     }
 
+    bool stopped() const noexcept {
+        return stopped_;
+    }
+
     void stop() {
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -47,7 +51,7 @@ private:
     std::mutex mutex_;
     std::condition_variable cv_;
     std::deque<T> queue_;
-    bool stopped_{false};
+    std::atomic_bool stopped_{false};
 };
 
 struct FileChunk

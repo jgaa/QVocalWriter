@@ -32,6 +32,8 @@ class AppEngine : public QObject
     Q_PROPERTY(AvailableModelsModel *postTranscribeModels READ postTranscribeModels CONSTANT)
     Q_PROPERTY(AvailableModelsModel *chatModels READ chatModels CONSTANT)
     Q_PROPERTY(AvailableModelsModel *docPrepareModels READ docPrepareModels CONSTANT)
+    Q_PROPERTY(AvailableModelsModel *docTranslateModels READ docTranslateModels CONSTANT)
+    Q_PROPERTY(LanguagesModel* docTranslateLanguages READ docLanguages CONSTANT)
     Q_PROPERTY(AvailableModelsModel *translationModels READ translationModels CONSTANT)
     Q_PROPERTY(LanguagesModel* sourceLanguages READ sourceLanguages CONSTANT)
     Q_PROPERTY(LanguagesModel* targetLanguages READ targetLanguages CONSTANT)
@@ -124,11 +126,17 @@ public:
     AvailableModelsModel *translationModels() {
         return &translation_models_;
     }
+    AvailableModelsModel *docTranslateModels() {
+        return &doc_translate_models_;
+    }
     LanguagesModel* sourceLanguages() {
         return &source_languages_model_;
     }
     LanguagesModel* targetLanguages() {
         return &target_languages_model_;
+    }
+    LanguagesModel* docLanguages() {
+        return &doc_translate_languages_model_;
     }
     AvailableModelsModel* docPrepareModels() {
         return &doc_prepare_models_;;
@@ -228,8 +236,10 @@ private:
     AvailableModelsModel live_transcribe_models_{ModelKind::WHISPER, "transcribe_model.live.selected"};
     AvailableModelsModel post_transcribe_models_{ModelKind::WHISPER, "transcribe_model.post.selected"};
     AvailableModelsModel doc_prepare_models_{ModelKind::GENERAL, "doc_prepare_model.selected"};
-    LanguagesModel source_languages_model_{"translate.source_language"};
-    LanguagesModel target_languages_model_{"translate.target_language"};
+    AvailableModelsModel doc_translate_models_{ModelKind::GENERAL, "doc_translate_model.selected"};
+    LanguagesModel source_languages_model_{"translate.source_language", true};
+    LanguagesModel target_languages_model_{"translate.target_language", false};
+    LanguagesModel doc_translate_languages_model_{"doc.translate.target-language", false};
     RewriteStyleModel rewrite_style_{"transcribe.doc.rewrite_style"};
     std::shared_ptr<ChatConversation> chat_conversation_; // the current conversation
     AudioController audio_controller_;
@@ -251,6 +261,7 @@ private:
     std::shared_ptr<GeneralModel> chat_model_;
     std::shared_ptr<GeneralModel> translate_model_;
     std::shared_ptr<GeneralModel> doc_prepare_model_;
+    std::shared_ptr<GeneralModel> doc_translate_model_;
     qreal recording_level_{};
     QString current_recorded_text_;
     QList<Language> languageList_;

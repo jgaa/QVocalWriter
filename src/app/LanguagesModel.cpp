@@ -61,10 +61,12 @@ static const auto defaultLanguages = to_array<LanguagesModel::Entry>({
 
 } // anon ns
 
-LanguagesModel::LanguagesModel(const QString& settingsKey, QObject *parent)
-    : QAbstractListModel(parent), settings_key_{settingsKey}
+LanguagesModel::LanguagesModel(const QString& settingsKey, bool showAuto, QObject *parent)
+    : QAbstractListModel(parent), settings_key_{settingsKey}, show_auto_{showAuto}
 {
-    auto lngs = std::vector<Entry>(defaultLanguages.begin(), defaultLanguages.end());
+    auto lngs = std::vector<Entry>(
+        defaultLanguages.begin() + (show_auto_ ? 0 : 1)
+        , defaultLanguages.end());
     // Sort
     std::sort(lngs.begin(), lngs.end(), [](const Entry& a, const Entry& b) {
         // always keep "auto" first

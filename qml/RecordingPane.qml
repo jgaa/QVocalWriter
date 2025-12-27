@@ -171,6 +171,41 @@ Item {
             }
         }
 
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Label {
+                text: qsTr("Translate using ")
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            ModelPicker {
+                id: docTranslateModelPicker
+                Layout.fillWidth: true
+                model: appEngine.docTranslateModels
+            }
+
+
+            Label {
+                text: qsTr("to")
+                visible: docTranslateModelPicker.model.hasSelection
+            }
+
+            ComboBox {
+                id: sourceLang
+                Layout.fillWidth: true
+                model: appEngine.docTranslateLanguages   // LanguagesModel*
+                textRole: "name"
+                valueRole: "code"
+                visible: docTranslateModelPicker.model.hasSelection
+
+                // LanguagesModel carries selection; keep QML simple:
+                currentIndex: appEngine.docTranslateLanguages.selected
+                onActivated: appEngine.docTranslateLanguages.selected = currentIndex
+            }
+        }
+
         // --- Prepare button ---
         Button {
             id: prepareButton

@@ -394,6 +394,8 @@ std::filesystem::path ModelMgr::findModelPath(ModelKind kind, const ModelInfo &m
 {
     auto base = QSettings{}.value("models/path", "").toString().trimmed();
     if (base.isEmpty()) {
+        // This is supposed to be set in main(). This is a fallback.
+        LOG_WARN_N << "Model path not set in settings; using default.";
         base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/models";
     }
 

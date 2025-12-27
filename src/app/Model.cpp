@@ -74,13 +74,10 @@ Model::Model(std::string name, std::unique_ptr<Model::Config> && config)
 Model::~Model()
 {
     LOG_DEBUG_EX(*this) << "Destroying model...";
-    stop();
 
-    if (is_loaded_) {
-        if (model_instance_) {
-            model_instance_->unloadNow(); // non-coroutine version
-        }
-        is_loaded_ = false;
+    if (!is_stopped_) {
+        LOG_WARN_N << "Model destroyed without being stopped. Stopping now...";
+        QCoro::waitFor(stop());
     }
 }
 
@@ -145,18 +142,19 @@ QCoro::Task<bool> Model::unloadModel()
 
 QCoro::Task<void> Model::stop()
 {
+    LOG_TRACE_N << "Stopping model: " << name() << " in state " << state();
     if (is_stopped_) {
         LOG_TRACE_EX(*this) << "Model already stopped.";
         co_return;
     }
-    if(state() < State::STOPPING) {
+
+    if(state() <= State::STOPPING) {
         LOG_DEBUG_EX(*this) << "Stopping model...";
         enqueueCommand(std::make_unique<Operation>(CmdType::EXIT));
     }
 
     // Wait for the stopped signal
     LOG_DEBUG_EX(*this) << "Waiting for model to stop...";
-    // co_await qCoro(this, &Model::stopped);
 
     // Join the thread
     if (worker_ && worker_->joinable()) {
@@ -192,6 +190,11 @@ bool Model::failed(QString message)
 void Model::enqueueCommand(std::unique_ptr<Operation> &&op)
 {
     assert(op);
+
+    if (cmd_queue_.stopped()) {
+        LOG_WARN_N << "Cannot enqueue command, command queue is stopped.";
+    }
+
     LOG_TRACE_EX(*this) << "Enqueue command: " << *op;
     cmd_queue_.push(std::move(op));
 }

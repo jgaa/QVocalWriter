@@ -26,14 +26,6 @@ using namespace std;
 
 namespace {
 
-// string getTranscriberModelId(const ModelDef &model, const Language &language)
-// {
-//     if (model.has_lng_postfix && language.whisper_language == "en") {
-//         return format("{}.en", model.whisper_size);
-//     }
-
-//     return string{model.whisper_size};
-// }
 
 static constexpr auto translate_system_prompts = to_array<string_view>({
     string_view{R"(You are a professional translation engine.
@@ -78,6 +70,44 @@ Guidelines:
 
 Output only the translated text.)"}
 });
+
+constexpr string_view translate_document_prompt = // X) Final translation pass (preserve style, humor, and format)
+    R"(You are a professional human translator.
+
+Your task:
+- Translate the document into the TARGET LANGUAGE.
+- This is a FINAL TRANSLATION PASS, not a rewrite.
+
+Absolute rules:
+- Do NOT rewrite, summarize, or restructure the text.
+- Do NOT add or remove content.
+- Do NOT “improve” clarity beyond what is required for correct translation.
+
+Preservation rules:
+- Preserve tone, register, and voice (formal, informal, emotional, ranting, neutral, etc).
+- Preserve humor, irony, sarcasm, and rhetorical devices.
+- Preserve line breaks, paragraphs, and spacing.
+- Preserve Markdown, formatting, bullet points, headings, emphasis, and code blocks exactly.
+- Preserve emojis, punctuation style, and capitalization patterns where possible.
+
+Translation rules:
+- Translate idioms naturally into the target language where possible.
+- If no natural equivalent exists, translate literally while preserving intent.
+- Proper names should NOT be translated unless there is a well-established equivalent.
+- Technical terms should remain consistent; prefer established translations.
+
+Edge cases:
+- If a word or phrase is untranslatable or ambiguous, keep the original and add [untranslated].
+- Do NOT explain translation choices.
+
+Output requirements:
+- Output ONLY the translated text.
+- No preface, no commentary, no notes.
+
+TARGET LANGUAGE:
+%1
+)";
+
 
 
 template <typename T>
@@ -322,6 +352,10 @@ void AppEngine::prepareAvailableModels()
     doc_prepare_models_.SetModels(
         ModelMgr::instance().availableModels(
             doc_prepare_models_.kind(), ModelInfo::Capability::Rewrite));
+
+    doc_translate_models_.SetModels(
+        ModelMgr::instance().availableModels(
+            doc_prepare_models_.kind(), ModelInfo::Capability::Translate));
 }
 
 void AppEngine::setRecordedText(const QString text)
@@ -538,6 +572,10 @@ AppEngine::AppEngine() {
             this,
             &AppEngine::stateFlagsChanged);
 
+    connect(&doc_translate_models_,
+            &AvailableModelsModel::selectedChanged,
+            this,
+            &AppEngine::stateFlagsChanged);
 
 }
 
@@ -797,27 +835,37 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
     assert(rec_transcriber_ == nullptr);
 
     const bool have_rewrite_step = rewrite_style_.hasSelection() && doc_prepare_models_.hasSelection();
+    const bool have_translate_step = doc_translate_models_.hasSelection() && doc_translate_languages_model_.haveSelection();
 
     const auto whisper_models = ModelMgr::instance().availableModels(ModelKind::WHISPER, ModelInfo::Capability::Transcribe);
     if (live_transcribe_models_.hasSelection()) {
         const auto qid = QString::fromUtf8(post_transcribe_models_.currentId());
-        if (auto model = ModelMgr::instance().findModelById(ModelKind::WHISPER, qid); model) {
 
-            LOG_DEBUG_N << "Preparing live transcriber model: " << qid;
-
-            const auto language = languageList_.at(size_t(language_index_));
-            if (rec_transcriber_ = co_await prepareTranscriber(
-                    "live-transcriber"s,
-                    *model,
-                    language.whisper_language,
-                    true, // Load the live transcriber so it reacts faster when we start recording
-                    !have_rewrite_step && !post_transcribe_models_.hasSelection() // Submit final text?
-                    ); !rec_transcriber_) {
-                co_return failed(tr("Failed to prepare live transcriber %1").arg(qid));
-            }
-
+        if (rec_transcriber_ && rec_transcriber_->modelInfo().id == qid) {
+            LOG_DEBUG_N << "Live transcriber model already prepared: " << qid;
         } else {
-            co_return failed(tr("Transcription model not found: %1").arg(qid));
+            if (rec_transcriber_ && rec_transcriber_->isLoaded()) {
+                co_await rec_transcriber_->unloadModel();
+                rec_transcriber_.reset();
+            }
+            if (auto model = ModelMgr::instance().findModelById(ModelKind::WHISPER, qid); model) {
+
+                LOG_DEBUG_N << "Preparing live transcriber model: " << qid;
+
+                const auto language = languageList_.at(size_t(language_index_));
+                if (rec_transcriber_ = co_await prepareTranscriber(
+                        "live-transcriber"s,
+                        *model,
+                        language.whisper_language,
+                        true, // Load the live transcriber so it reacts faster when we start recording
+                        !have_rewrite_step && !post_transcribe_models_.hasSelection() // Submit final text?
+                        ); !rec_transcriber_) {
+                    co_return failed(tr("Failed to prepare live transcriber %1").arg(qid));
+                }
+
+            } else {
+                co_return failed(tr("Transcription model not found: %1").arg(qid));
+            }
         }
     } else {
         rec_transcriber_.reset();
@@ -826,23 +874,33 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
     // same with post_transcriber_ and transcribe_post_model_name_
     if (post_transcribe_models_.hasSelection()) {
         const auto qid = QString::fromUtf8(post_transcribe_models_.currentId());
-        if (auto model = ModelMgr::instance().findModelById(ModelKind::WHISPER, qid); model) {
 
-            LOG_DEBUG_N << "Preparing post transcriber model: " << qid;
-
-            const auto language = languageList_.at(size_t(language_index_));
-            if (post_transcriber_ = co_await prepareTranscriber(
-                    "post--transcriber"s,
-                    *model,
-                    language.whisper_language,
-                    true, // Load the live transcriber so it reacts faster when we start recording
-                    !have_rewrite_step // Submit final text?
-                    ); !rec_transcriber_) {
-                co_return failed(tr("Failed to prepare post-transcriber %1").arg(qid));
+        if (post_transcriber_ && post_transcriber_->modelInfo().id == qid) {
+            LOG_DEBUG_N << "Post transcriber already prepared: " << qid;
+        } else {
+            if (post_transcriber_ && post_transcriber_->isLoaded()) {
+                co_await post_transcriber_->unloadModel();
+                post_transcriber_.reset();
             }
 
-        } else {
-            co_return failed(tr("Transcription model not found: %1").arg(qid));
+            if (auto model = ModelMgr::instance().findModelById(ModelKind::WHISPER, qid); model) {
+
+                LOG_DEBUG_N << "Preparing post transcriber model: " << qid;
+
+                const auto language = languageList_.at(size_t(language_index_));
+                if (post_transcriber_ = co_await prepareTranscriber(
+                        "post--transcriber"s,
+                        *model,
+                        language.whisper_language,
+                        false, // Load it later
+                        false // Submit final text?
+                        ); !rec_transcriber_) {
+                    co_return failed(tr("Failed to prepare post-transcriber %1").arg(qid));
+                }
+
+            } else {
+                co_return failed(tr("Transcription model not found: %1").arg(qid));
+            }
         }
     } else  {
         post_transcriber_.reset();
@@ -850,19 +908,50 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
 
     if (have_rewrite_step) {
         const auto qid = QString::fromUtf8(doc_prepare_models_.currentId());
-        if (auto model = ModelMgr::instance().findModelById(ModelKind::GENERAL, qid); model) {
 
-            LOG_DEBUG_N << "Preparing document rewrite model: " << qid;
-            doc_prepare_model_ = co_await prepareGeneralModel(
-                "doc-rewrite-model",
-                *model,
-                false // Load it later
-                );
+        if (doc_prepare_model_ && doc_prepare_model_->modelInfo().id == qid) {
+            LOG_DEBUG_N << "Document rewrite model already prepared: " << qid;
         } else {
-            co_return failed(tr("Doc rewrite model not found: %1").arg(qid));
+            if (doc_prepare_model_ && doc_prepare_model_->isLoaded()) {
+                co_await doc_prepare_model_->unloadModel();
+                doc_prepare_model_.reset();
+            }
+
+            if (auto model = ModelMgr::instance().findModelById(ModelKind::GENERAL, qid); model) {
+                LOG_DEBUG_N << "Preparing document rewrite model: " << qid;
+                doc_prepare_model_ = co_await prepareGeneralModel(
+                    "doc-rewrite-model",
+                    *model,
+                    false // Load it later
+                    );
+            } else {
+                co_return failed(tr("Doc rewrite model not found: %1").arg(qid));
+            }
         }
     } else {
         doc_prepare_model_.reset();
+    }
+
+    if (have_translate_step) {
+        const auto qid = QString::fromUtf8(doc_translate_models_.currentId());
+
+        if (doc_translate_model_ && doc_translate_model_->modelInfo().id == qid) {
+            LOG_DEBUG_N << "Document translation model already prepared: " << qid;
+        } else {
+            if (auto model = ModelMgr::instance().findModelById(ModelKind::GENERAL, qid); model) {
+
+                LOG_DEBUG_N << "Preparing document translation model: " << qid;
+                doc_translate_model_ = co_await prepareGeneralModel(
+                    "doc-translate-model",
+                    *model,
+                    false // Load it later
+                    );
+            } else {
+                co_return failed(tr("Doc translate model not found: %1").arg(qid));
+            }
+        }
+    } else {
+        doc_translate_model_.reset();
     }
 
     setState(State::Ready);
@@ -910,6 +999,9 @@ QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareTranscriber(
 
     shared_ptr<TranscriberWhisper> transcriber = make_shared<
         TranscriberWhisper>(name, std::move(cfg), chunk_queue_.get(), pcm_file_path_, recorder_->format());
+
+    // Unconnected partial text signal
+
 
     // Relay partial text signals
     connect(
@@ -974,17 +1066,22 @@ QCoro::Task<void> AppEngine::onRecordingDone()
     // TODO: Don't unload models if they are re-used later
     LOG_DEBUG_N << "Recording done, starting post-processing transcription if needed";
 
-    if (rec_transcriber_ && rec_transcriber_->isLoaded()) {
-        rec_transcriber_->unloadModel();
+    QString final_text;
+
+    setState(State::Processing);
+    setStateText(tr("Starting post-processing..."));
+
+    if (rec_transcriber_) {
+        LOG_DEBUG_N << "Stopping live transcriber before post-processing";
+        rec_transcriber_->stopTranscribing();
+        final_text = QString::fromStdString(rec_transcriber_->finalText());
+
+        co_await rec_transcriber_->stop();
+        rec_transcriber_.reset();
     }
 
     if (post_transcriber_) {
-        LOG_DEBUG_N << "Stopping live transcriber before post-processing";
-        if (rec_transcriber_) {
-            rec_transcriber_->stopTranscribing();
-        }
-
-        setState(State::Processing);
+        setStateText(tr("Running post-processing transcription..."));
         assert(post_transcriber_->haveModel());
         if (!post_transcriber_->isLoaded()) {
             co_await post_transcriber_->loadModel();
@@ -994,30 +1091,31 @@ QCoro::Task<void> AppEngine::onRecordingDone()
             failed(tr("Post-processing transcription failed"));
             co_return;
         }
+
+        final_text = QString::fromStdString(post_transcriber_->finalText());
     }
 
     if (post_transcriber_ && post_transcriber_->isLoaded()) {
-        post_transcriber_ ->unloadModel();
+        co_await post_transcriber_ ->unloadModel();
     }
-
-    string transcript = post_transcriber_ ? post_transcriber_->finalText() : rec_transcriber_->finalText();
-    QString final_text;
 
     if (doc_prepare_model_) {
         assert(rewrite_style_.hasSelection());
         LOG_DEBUG_N << "Starting document preparation rewrite";
-        setState(State::Processing);
 
         if (!doc_prepare_model_->isLoaded()) {
+            setStateText(tr("Loading rewrite model..."));
             co_await doc_prepare_model_->loadModel();
         }
+
+        setStateText(tr("Rewriting document..."));
 
         string formatted_prompt;
         {
             const auto prompt = rewrite_style_.makePrompt();
 
             const array<ChatMessage, 2> msgs = {ChatMessage{PromptRole::System, prompt.toStdString()},
-                                          {PromptRole::User, std::move(transcript)}};
+                                          {PromptRole::User, final_text.toStdString()}};
 
             array<const ChatMessage*, 2> message_ptrs = {&msgs[0], &msgs[1]};
 
@@ -1035,10 +1133,48 @@ QCoro::Task<void> AppEngine::onRecordingDone()
         }
 
         final_text = QString::fromStdString(doc_prepare_model_->finalText());
+
+        if (!(doc_translate_model_ && doc_translate_model_->modelInfo().id == doc_prepare_model_->modelInfo().id)) {
+            co_await doc_prepare_model_->stop();
+            doc_prepare_model_.reset();
+        }
     }
 
-    if (final_text.isEmpty()) {
-        final_text = QString::fromUtf8(transcript);
+    if (doc_translate_model_ && !final_text.isEmpty()) {
+        assert(doc_translate_languages_model_.haveSelection());
+
+        if (!doc_translate_model_->isLoaded()) {
+            setStateText(tr("Loading translate model..."));
+            co_await doc_translate_model_->loadModel();
+        }
+
+        setStateText(tr("Translating..."));
+
+        string formatted_prompt;
+        {
+            const auto prompt = QString::fromUtf8(translate_document_prompt)
+                                     .arg(doc_translate_languages_model_.selectedName());
+            const array<ChatMessage, 2> msgs = {ChatMessage{PromptRole::System, prompt.toStdString()},
+                                                {PromptRole::User, final_text.toStdString()}};
+
+            array<const ChatMessage*, 2> message_ptrs = {&msgs[0], &msgs[1]};
+
+            formatted_prompt = doc_translate_model_->modelInfo().formatPrompt(message_ptrs);
+
+            LOG_TRACE_N << "Document rewrite formatted prompt: " << formatted_prompt;
+        }
+
+        auto result = co_await doc_translate_model_->prompt(std::move(formatted_prompt),
+                                                          qvw::LlamaSessionCtx::Params::TranslateStrict());
+
+        if (!result) {
+            failed("Translation failed.");
+            co_return;
+        }
+
+        final_text = QString::fromStdString(doc_translate_model_->finalText());
+
+        co_await doc_translate_model_->unloadModel();
     }
 
     // TODO: Add translation from final_text
@@ -1062,7 +1198,6 @@ QCoro::Task<void> AppEngine::doReset()
 
     if (rec_transcriber_) {
         co_await rec_transcriber_->stop();
-
         // reset later
         QTimer::singleShot(0, this, [this]() {
             rec_transcriber_.reset();
@@ -1074,6 +1209,22 @@ QCoro::Task<void> AppEngine::doReset()
         // reset later
         QTimer::singleShot(0, this, [this]() {
             post_transcriber_.reset();
+        });
+    }
+
+    if (doc_prepare_model_) {
+        co_await doc_prepare_model_->stop();
+        // reset later
+        QTimer::singleShot(0, this, [this]() {
+            doc_prepare_model_.reset();
+        });
+    }
+
+    if (doc_translate_model_) {
+        co_await doc_translate_model_->stop();
+        // reset later
+        QTimer::singleShot(0, this, [this]() {
+            doc_translate_model_.reset();
         });
     }
 
