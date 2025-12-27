@@ -13,7 +13,6 @@ Window {
     title: qsTr("QVocalWriter")
 
     // Which pane is active: 0 = Transcribe, 1 = Translate, 2 = Interactive
-    property int currentView: 0
     property string statusText: appEngine.stateText
 
     // Load saved size and position
@@ -74,8 +73,8 @@ Window {
                         Layout.fillWidth: true
                         text: "🎙  " + qsTr("Transcribe")
                         checkable: true
-                        checked: root.currentView === 0
-                        onClicked: root.currentView = 0
+                        checked: appEngine.mode === AppEngine.Transcribe
+                        onClicked: appEngine.mode = AppEngine.Transcribe
                     }
 
                     // Translate
@@ -83,8 +82,8 @@ Window {
                         Layout.fillWidth: true
                         text: "🌐  " + qsTr("Translate")
                         checkable: true
-                        checked: root.currentView === 1
-                        onClicked: root.currentView = 1
+                        checked: appEngine.mode === AppEngine.Translate
+                        onClicked: appEngine.mode = AppEngine.Translate
                     }
 
                     // Interactive
@@ -92,8 +91,8 @@ Window {
                         Layout.fillWidth: true
                         text: "💬  " + qsTr("Interactive")
                         checkable: true
-                        checked: root.currentView === 2
-                        onClicked: root.currentView = 2
+                        checked: appEngine.mode === AppEngine.Chat
+                        onClicked: appEngine.mode = AppEngine.Chat
                     }
 
                     Item {
@@ -140,7 +139,7 @@ Window {
                 Layout.margins: 10
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                currentIndex: root.currentView
+                currentIndex: appEngine.mode
 
                 // 0: TRANSCRIBE – reuse RecordingPane
                 RecordingPane {

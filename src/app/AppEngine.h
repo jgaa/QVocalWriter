@@ -48,8 +48,9 @@ class AppEngine : public QObject
     Q_PROPERTY(const QString& recordedText MEMBER current_recorded_text_ NOTIFY recordedTextChanged)
     Q_PROPERTY(const QStringList& michrophones READ microphones() NOTIFY microphonesChanged)
     Q_PROPERTY(int currentMic READ currentMic WRITE setCurrentMic NOTIFY currentMicChanged)
-    Q_PROPERTY(const QString& stateText MEMBER state_text_ NOTIFY stateTextChanged)
+    Q_PROPERTY(const QString& stateText READ stateText NOTIFY stateTextChanged)
     Q_PROPERTY(ChatMessagesModel* chatMessages READ chatMessages CONSTANT)
+    Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged)
 
 public:
     enum class State {
@@ -74,6 +75,18 @@ public:
         QString name; // "English"
         std::string_view whisper_language; // "en"
     };
+
+    enum class Mode : int {
+        Transcribe,
+        Translate,
+        Chat,
+        Count // meta
+    };
+    Q_ENUM(Mode)
+
+    // Keep separate states for each mode (UI pane)
+    using states_t = std::array<State, static_cast<size_t>(Mode::Count)>;
+    using state_text_t = std::array<QString, static_cast<size_t>(Mode::Count)>;
 
     Q_INVOKABLE void setLanguageIndex(int index);
     Q_INVOKABLE void startRecording();
@@ -173,9 +186,12 @@ signals:
     void stateTextChanged();
     void languagesChanged();
     void translationAvailable(const QString& text);
+    void modeChanged();
 
 private:
-    State state() const { return state_; }
+    Mode mode() const { return mode_; }
+    void setMode(Mode newMode);
+    State state() const { return state_[static_cast<size_t>(mode())]; }
     void setState(State newState);
     void createPipelineIfNeeded();
     QCoro::Task<void> startPrepareForRecording();
@@ -196,6 +212,9 @@ private:
     QCoro::Task<void> onRecordingDone();
     bool failed(const QString& why);
     QCoro::Task<void> doReset();
+    QString stateText() const {
+        return state_texts_[static_cast<size_t>(mode())];
+    }
     void setStateText(QString text = {});
     void prepareLanguages();
     QCoro::Task<bool> sendChatPrompt(const QString& prompt);
@@ -214,7 +233,8 @@ private:
     RewriteStyleModel rewrite_style_{"transcribe.doc.rewrite_style"};
     std::shared_ptr<ChatConversation> chat_conversation_; // the current conversation
     AudioController audio_controller_;
-    State state_{State::Idle};
+    states_t state_{State::Idle, State::Idle, State::Idle};
+    state_text_t state_texts_{QString("Idle"), QString("Idle"), QString("Idle")};
     QStringList languages_;
     QStringList transcribe_model_sizes_;
     int language_index_{0}; // Auto
@@ -233,8 +253,9 @@ private:
     std::shared_ptr<GeneralModel> doc_prepare_model_;
     qreal recording_level_{};
     QString current_recorded_text_;
-    QString state_text_;
     QList<Language> languageList_;
+    Mode mode_{Mode::Transcribe};
 };
 
 std::ostream& operator << (std::ostream& os, AppEngine::State state);
+std::ostream& operator << (std::ostream& os, AppEngine::Mode mode);

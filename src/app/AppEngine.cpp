@@ -106,6 +106,15 @@ ostream& operator << (ostream& os, AppEngine::State state) {
     return os << states.at(static_cast<size_t>(state));
 }
 
+std::ostream& operator << (std::ostream& os, AppEngine::Mode mode) {
+    constexpr auto modes = to_array<string_view>({
+        "Transcribe",
+        "Chat",
+        "Translate"
+    });
+    return os << modes.at(static_cast<size_t>(mode));
+}
+
 void AppEngine::startRecording()
 {
     LOG_INFO << "Starting recording";
@@ -584,7 +593,7 @@ bool AppEngine::canPrepareForTranslate() const
 
 bool AppEngine::canStart() const
 {
-    return state_ == State::Ready;
+    return state() == State::Ready;
 }
 
 bool AppEngine::canStop() const
@@ -622,6 +631,17 @@ void AppEngine::initLogging()
 
             LOG_INFO << "Logging to: " << path;
         }
+    }
+}
+
+void AppEngine::setMode(Mode newMode)
+{
+    if (mode() != newMode) {
+        LOG_DEBUG_N << "Mode changed from " << mode() << " to " << newMode;
+        mode_ = newMode;
+        emit modeChanged();
+        emit stateFlagsChanged();
+        emit stateTextChanged();
     }
 }
 
@@ -671,10 +691,10 @@ Reasoning:
 
 
 void AppEngine::setState(State newState)
-{    
-    if (state_ != newState) {
-        LOG_DEBUG_N << "Recording state changed from " << state_ << " to " << newState;
-        state_ = newState;
+{
+    if (state() != newState) {
+        LOG_DEBUG_N << "State changed from " << state() << " to " << newState;
+        state_[static_cast<size_t>(mode())] = newState;
         emit stateChanged(newState);
         emit stateFlagsChanged();
         setStateText();
@@ -1081,12 +1101,12 @@ void AppEngine::setStateText(QString text) {
     });
 
     if (text.isEmpty()) {
-        text = rec_names.at(static_cast<int>(state_));
+        text = rec_names.at(static_cast<int>(state()));
     }
 
-    if (text != state_text_) {
-        LOG_DEBUG_N << "State text changed to: " << text.toStdString();
-        state_text_ = text;
+    if (text != stateText()) {
+        LOG_DEBUG_N << "State text changed to: " << text;
+        state_texts_[static_cast<size_t>(mode())] = text;
         emit stateTextChanged();
     }
 }
