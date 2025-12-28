@@ -186,32 +186,20 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         mi_t::Q4_0,
         26400,
         "",
-        mi_t::Chat | mi_t::Rewrite,
+        mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
         "https://huggingface.co/TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF/resolve/main/"
     },
 
     {
-        "heavy-moe-deepseek",
-        "mixtral-8x7b-instruct-v0.1-deepseek-q4_k_m",
-        ModelInfo::PromptStyle::Mistral,
-        "mixtral-8x7b-instruct-v0.1-deepseek.Q4_K_M.gguf",
+        "OpenAI-20B-NEO-CODE-DI-Uncensored",
+        "OpenAI-20B-NEO-CODE-DI-Uncensored-Q5_1",
+        ModelInfo::PromptStyle::ChatML,
+        "OpenAI-20B-NEOPlus-Uncensored-Q5_1.gguf",
         mi_t::Q4_0,
-        26400,
+        15729,
         "",
-        mi_t::Chat | mi_t::Rewrite,
-        "https://huggingface.co/deepseekr/Mixtral-8x7B-Instruct-v0.1-Deepseek-GGUF/resolve/main/"
-    },
-
-    {
-        "heavy-moe-uncensored",
-        "mixtral-8x7b-instruct-v0.1-uncensored-q4_k_m",
-        ModelInfo::PromptStyle::Mistral,
-        "mixtral-8x7b-instruct-v0.1-uncensored.Q4_K_M.gguf",
-        mi_t::Q4_0,
-        26400,
-        "",
-        mi_t::Chat | mi_t::Rewrite,
-        "https://huggingface.co/bartowski/Mixtral-8x7B-Instruct-v0.1-Uncensored-GGUF/resolve/main/"
+        mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
+        "https://huggingface.co/DavidAU/OpenAi-GPT-oss-20b-HERETIC-uncensored-NEO-Imatrix-gguf/resolve/main/OpenAI-20B-NEOPlus-Uncensored-Q5_1.gguf?download=true"
     }
 });
 
@@ -335,9 +323,12 @@ qvw::WhisperEngine &ModelMgr::whisperEngine() {
             throw std::runtime_error{"Failed to create Whisper engine instance."};
         }
 
+        auto lvl = ::logfault::LogManager::Instance().GetLoglevel();
+        if (!QSettings{}.value("logging/trivial.llm.forward").toBool()) {
+            lvl = ::logfault::LogLevel::NOTICE;
+        }
         whisper_engine_->setLogger(logfault_fwd::forward_to_logfault,
-                                   static_cast<logfault_fwd::Level>(
-                                       ::logfault::LogManager::Instance().GetLoglevel()));
+                                   static_cast<logfault_fwd::Level>(lvl));
     }
 
     assert(whisper_engine_);
@@ -353,9 +344,13 @@ qvw::LlamaEngine &ModelMgr::llamaEngine()
             throw std::runtime_error{"Failed to create Llama engine instance."};
         }
 
+        auto lvl = ::logfault::LogManager::Instance().GetLoglevel();
+        if (!QSettings{}.value("logging/trivial.llm.forward").toBool()) {
+            lvl = ::logfault::LogLevel::NOTICE;
+        }
+
         llama_engine_->setLogger(logfault_fwd::forward_to_logfault,
-                                 static_cast<logfault_fwd::Level>(
-                                     ::logfault::LogManager::Instance().GetLoglevel()));
+                                 static_cast<logfault_fwd::Level>(lvl));
     }
 
     assert(llama_engine_);

@@ -49,7 +49,7 @@ Item {
 
                     Button {
                         text: qsTr("Prepare")
-                        enabled: appEngine.canPrepareForTranslate && root.hasModel
+                        enabled: appEngine.canPrepareforTranslate
                         onClicked: appEngine.prepareForTranslation()
                     }
 

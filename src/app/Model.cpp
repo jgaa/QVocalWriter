@@ -33,7 +33,7 @@ std::pair<bool /* json */, std::string /* content or json */> toLog(const Model&
 }
 } // logfault ns
 
-std::ostream& operator << (std::ostream& os, Model::State state) {
+std::ostream& operator << (std::ostream& os, ModelState state) {
     constexpr auto states = to_array<string_view>({
         "CREATED",
         "RUNNING",
@@ -54,7 +54,8 @@ std::ostream& operator<<(std::ostream &os, Model::CmdType cmd) {
     constexpr auto cmds = to_array<string_view>({
         "CREATE_CONTEXT",
         "COMMAND",
-        "EXIT"
+        "EXIT",
+        "JUST_QUIT"
     });
 
     return os << cmds.at(static_cast<size_t>(cmd));
@@ -73,25 +74,25 @@ Model::Model(std::string name, std::unique_ptr<Model::Config> && config)
 
 Model::~Model()
 {
-    LOG_DEBUG_EX(*this) << "Destroying model...";
+    LOG_DEBUG_N << "Destroying model..." << modelInfo().id;
 
     if (!is_stopped_) {
         LOG_WARN_N << "Model destroyed without being stopped. Stopping now...";
-        QCoro::waitFor(stop());
+        QCoro::waitFor(stop(true));
     }
 }
 
 QCoro::Task<bool> Model::init(const QString &modelId)
 {
     assert(!haveModel());
-    setState(State::PREPARING);
+    setState(ModelState::PREPARING);
     model_instance_ = co_await ModelMgr::instance().getInstance(kind(), modelId);
     if (model_instance_ == nullptr) {
         failed(tr("Failed to get model instance for id: %1").arg(modelId));
         co_return false;
     }
 
-    setState(State::READY);
+    setState(ModelState::READY);
     co_return true;
 }
 
@@ -100,7 +101,7 @@ QCoro::Task<bool> Model::loadModel()
     assert(haveModel());
     assert(!is_loaded_);
 
-    setState(State::LOADING);
+    setState(ModelState::LOADING);
     const bool ok = co_await model_instance_->load();
     if (!ok) {
         failed(tr("Failed to load model: %1").arg(model_instance_->modelId()));
@@ -124,7 +125,7 @@ QCoro::Task<bool> Model::loadModel()
                 this, &Model::finalTextAvailable);
     }
 
-    setState(State::LOADED);
+    setState(ModelState::LOADED);
     is_loaded_ = true;
     co_return true;
 }
@@ -140,7 +141,7 @@ QCoro::Task<bool> Model::unloadModel()
     co_return ok;
 }
 
-QCoro::Task<void> Model::stop()
+QCoro::Task<void> Model::stop(bool justQuit)
 {
     LOG_TRACE_N << "Stopping model: " << name() << " in state " << state();
     if (is_stopped_) {
@@ -148,9 +149,14 @@ QCoro::Task<void> Model::stop()
         co_return;
     }
 
-    if(state() <= State::STOPPING) {
-        LOG_DEBUG_EX(*this) << "Stopping model...";
-        enqueueCommand(std::make_unique<Operation>(CmdType::EXIT));
+    if(worker_ && worker_->joinable() && !cmd_queue_.stopped()) {
+        if (justQuit) {
+            LOG_DEBUG_EX(*this) << "Quitting model...";
+            enqueueCommand(std::make_unique<Operation>(CmdType::JUST_QUIT));
+        } else {
+            LOG_DEBUG_EX(*this) << "Stopping model...";
+            enqueueCommand(std::make_unique<Operation>(CmdType::EXIT));
+        }
     }
 
     // Wait for the stopped signal
@@ -168,21 +174,21 @@ QCoro::Task<void> Model::stop()
     co_return;
 }
 
-void Model::setState(State state)
+void Model::setState(ModelState state)
 {
     if(state_ != state) {
         LOG_DEBUG_EX(*this) << "Model state for "
                     << modelName()
                     <<" changed from " << state_ << " to " << state;
         state_ = state;
-        emit stateChanged();
+        emit stateChanged(this, state);
     }
 }
 
 bool Model::failed(QString message)
 {
     LOG_WARN_EX(*this) << "Model failed: " << message.toStdString();
-    setState(State::ERROR);
+    setState(ModelState::ERROR);
     emit errorOccurred(message);
     return false;
 }
@@ -201,11 +207,11 @@ void Model::enqueueCommand(std::unique_ptr<Operation> &&op)
 
 void Model::run() noexcept
 {
-    while(state() < State::STOPPING) {
+    while(state() < ModelState::STOPPING) {
         if (have_context_) {
-            setState(State::READY);
+            setState(ModelState::READY);
         } else {
-            setState(State::RUNNING);
+            setState(ModelState::RUNNING);
         }
 
         LOG_DEBUG_EX(*this) << ": Waiting for command...";
@@ -231,10 +237,19 @@ void Model::run() noexcept
                     break;
                 case CmdType::EXIT:
                     LOG_DEBUG_EX(*this) << ": Exit command received, stopping model...";
-                    setState(State::STOPPING);
+                    if (state() < ModelState::STOPPING) {
+                        setState(ModelState::STOPPING);
+                    }
 
                     stopImpl();
                     op->setResult(true);
+                    break;
+                case CmdType::JUST_QUIT:
+                    LOG_DEBUG_EX(*this) << ": Exit command received, stopping model...";
+                    op->setResult(true);
+                    if (state() < ModelState::STOPPING) {
+                        setState(ModelState::STOPPING);
+                    }
                     break;
                 default:
                     LOG_WARN_EX(*this) << ": Unknown command received.";

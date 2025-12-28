@@ -366,6 +366,18 @@ void AppEngine::setRecordedText(const QString text)
     }
 }
 
+void AppEngine::onModelChangedState(const Model *model, ModelState state)
+{
+    assert(model);
+    LOG_TRACE_N << "Model " << model->name() << " changed state to " << state;
+    if (state == ModelState::LOADING) {
+        setStateText(tr("Loading model: %1").arg(model->modelInfo().id));
+    }
+    if (state == ModelState::LOADED) {
+        setStateText(tr("Model loaded: %1").arg(model->modelInfo().id));
+    }
+}
+
 void AppEngine::saveTranscriptToFile(const QUrl &path)
 {
     QString filename = path.toLocalFile();
@@ -389,6 +401,7 @@ void AppEngine::startChatConversation(const QString &name)
     chat_conversation_ = make_shared<ChatConversation>(name);
     chat_conversation_->setModel(&chat_messages_model_);
     chat_conversation_->addMessage(make_shared<ChatMessage>(PromptRole::System, getChatSystemPrompt()));
+    setState(State::Idle);
 }
 
 bool AppEngine::swapTranslationLanguages()
@@ -549,8 +562,15 @@ AppEngine::AppEngine() {
 
     connect(&chat_models_,
             &AvailableModelsModel::selectedChanged,
-            this,
-            &AppEngine::stateFlagsChanged);
+            [this]() {
+                LOG_TRACE_N << "Chat model selection changed to: " << chat_models_.currentId();
+                emit stateFlagsChanged();
+            });
+
+    // connect(&chat_models_,
+    //         &AvailableModelsModel::selectedChanged,
+    //         this,
+    //         &AppEngine::stateFlagsChanged);
 
     connect(&translation_models_,
             &AvailableModelsModel::selectedChanged,
@@ -621,7 +641,8 @@ bool AppEngine::canPrepare() const
 
 bool AppEngine::canPrepareForChat() const
 {
-    return state() == State::Idle && !chat_models_.hasSelection();
+    LOG_TRACE_N << "state=" << state() << ", hasSelection=" << chat_models_.hasSelection();
+    return state() == State::Idle && chat_models_.hasSelection();
 }
 
 bool AppEngine::canPrepareForTranslate() const
@@ -641,7 +662,12 @@ bool AppEngine::canStop() const
 
 bool AppEngine::isBusy() const
 {
-    return stateIn({State::Processing, State::Preparing});
+    return stateIn({State::Processing, State::Preparing, State::Resetting});
+}
+
+bool AppEngine::canChangeConfig() const
+{
+    return state() == State::Idle;
 }
 
 void AppEngine::initLogging()
@@ -728,14 +754,14 @@ Reasoning:
 }
 
 
-void AppEngine::setState(State newState)
+void AppEngine::setState(State newState, const QString& text)
 {
     if (state() != newState) {
         LOG_DEBUG_N << "State changed from " << state() << " to " << newState;
         state_[static_cast<size_t>(mode())] = newState;
         emit stateChanged(newState);
         emit stateFlagsChanged();
-        setStateText();
+        setStateText(text);
     }
 }
 
@@ -793,13 +819,16 @@ QCoro::Task<void> AppEngine::startPrepareForChat(QString id)
     }
 
     assert(mi);
-    chat_model_ = co_await prepareGeneralModel(
+    if (chat_model_ = co_await prepareGeneralModel(
         "chat-model",
         *mi,
         true // Load it
-        );
-
-    setState(State::Ready);
+            ); chat_model_) {
+        setState(State::Ready);
+    } else {
+        assert(state() == State::Error);
+        LOG_WARN_N << "Failed to prepare chat model: " << id;
+    }
 
     co_return;
 }
@@ -839,7 +868,7 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
 
     const auto whisper_models = ModelMgr::instance().availableModels(ModelKind::WHISPER, ModelInfo::Capability::Transcribe);
     if (live_transcribe_models_.hasSelection()) {
-        const auto qid = QString::fromUtf8(post_transcribe_models_.currentId());
+        const auto qid = QString::fromUtf8(live_transcribe_models_.currentId());
 
         if (rec_transcriber_ && rec_transcriber_->modelInfo().id == qid) {
             LOG_DEBUG_N << "Live transcriber model already prepared: " << qid;
@@ -858,7 +887,7 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
                         *model,
                         language.whisper_language,
                         true, // Load the live transcriber so it reacts faster when we start recording
-                        !have_rewrite_step && !post_transcribe_models_.hasSelection() // Submit final text?
+                        false
                         ); !rec_transcriber_) {
                     co_return failed(tr("Failed to prepare live transcriber %1").arg(qid));
                 }
@@ -894,7 +923,7 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
                         language.whisper_language,
                         false, // Load it later
                         false // Submit final text?
-                        ); !rec_transcriber_) {
+                        ); !post_transcriber_) {
                     co_return failed(tr("Failed to prepare post-transcriber %1").arg(qid));
                 }
 
@@ -978,7 +1007,17 @@ QCoro::Task<std::shared_ptr<GeneralModel> > AppEngine::prepareGeneralModel(
         }
     );
 
-    co_await model->init(model_id);
+    connect(
+        model.get(),
+        &Model::stateChanged,
+        this,
+        &AppEngine::onModelChangedState);
+
+    if (!co_await model->init(model_id)) {
+        LOG_ERROR_N << "Failed to init general model: " << model_id;
+        failed(tr("Failed to initialize model: %1").arg(model_id));
+        co_return nullptr;
+    }
 
     if (loadModel) {
         co_await model->loadModel();
@@ -1068,8 +1107,7 @@ QCoro::Task<void> AppEngine::onRecordingDone()
 
     QString final_text;
 
-    setState(State::Processing);
-    setStateText(tr("Starting post-processing..."));
+    setState(State::Processing, tr("Starting post-processing..."));
 
     if (rec_transcriber_) {
         LOG_DEBUG_N << "Stopping live transcriber before post-processing";
@@ -1174,7 +1212,14 @@ QCoro::Task<void> AppEngine::onRecordingDone()
 
         final_text = QString::fromStdString(doc_translate_model_->finalText());
 
-        co_await doc_translate_model_->unloadModel();
+        co_await doc_translate_model_->stop();
+        doc_translate_model_.reset();
+    }
+
+    if (doc_prepare_model_) {
+        // In case we used the same model for rewrite and translation
+        co_await doc_prepare_model_->stop();
+        doc_prepare_model_.reset();
     }
 
     // TODO: Add translation from final_text

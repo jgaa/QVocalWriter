@@ -19,6 +19,7 @@
 #include "Queue.h"
 #include "ModelMgr.h"
 #include "ModelInfo.h"
+#include "ModelState.h"
 
 /*! Base-class for model handling
  *
@@ -47,7 +48,8 @@ public:
     enum class CmdType {
         CREATE_CONTEXT,
         COMMAND,
-        EXIT
+        EXIT,
+        JUST_QUIT
     };
 
     class Operation {
@@ -96,19 +98,6 @@ public:
 
     using cmd_queue_t = Queue<std::unique_ptr<Operation>>;
 
-    enum class State {
-        CREATED,
-        RUNNING,
-        PREPARING,
-        LOADING,
-        LOADED,
-        READY,
-        WORKING,
-        STOPPING,
-        DONE,
-        ERROR
-    };
-
     Model(std::string name, std::unique_ptr<Config> &&config);
     virtual ~Model();
 
@@ -125,12 +114,12 @@ public:
 
     void cancel();
     void reset();
-    [[nodiscard]] QCoro::Task<void> stop();
+    [[nodiscard]] QCoro::Task<void> stop(bool justQuit = false);
 
-    bool isCancelled() const noexcept { return state() >= State::STOPPING;}
+    bool isCancelled() const noexcept { return state() >= ModelState::STOPPING;}
     bool haveModel() const noexcept { return model_instance_ != nullptr; }
     bool isLoaded() const noexcept { return is_loaded_; }
-    State state() const noexcept {return state_.load();}
+    ModelState state() const noexcept {return state_.load();}
     std::string name() const noexcept {
         return name_;
     }
@@ -157,7 +146,7 @@ public:
     }
 
 protected:
-    void setState(State state);
+    void setState(ModelState state);
     bool failed(QString message);
     void enqueueCommand(std::unique_ptr<Operation> && op);
 
@@ -169,7 +158,7 @@ signals:
     void finalTextAvailable(const QString &text);
     void modelReady();
     void errorOccurred(const QString &message);
-    void stateChanged();
+    void stateChanged(const Model *model, ModelState state);
     void stopped();
 
 private:
@@ -178,7 +167,7 @@ private:
     std::string name_;
     std::unique_ptr<Config> config_;
     std::shared_ptr<ModelInstance> model_instance_;
-    std::atomic<State> state_{State::CREATED};
+    std::atomic<ModelState> state_{ModelState::CREATED};
     std::optional<std::jthread> worker_;
     cmd_queue_t cmd_queue_;
     std::mutex mutex_;
@@ -188,6 +177,6 @@ private:
 };
 
 
-std::ostream& operator << (std::ostream& os, Model::State state);
+std::ostream& operator << (std::ostream& os, ModelState state);
 std::ostream& operator<<(std::ostream &os, const Model::Operation& op);
 std::pair<bool /* json */, std::string /* content or json */> toLogHandler(const Model& m, bool json, std::string_view tag);

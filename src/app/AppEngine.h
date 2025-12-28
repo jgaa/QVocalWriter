@@ -12,6 +12,7 @@
 #include "AvailableModelsModel.h"
 #include "LanguagesModel.h"
 #include "RewriteStyleModel.h"
+#include "ModelState.h"
 
 class AudioRecorder;
 class AudioFileWriter;
@@ -20,6 +21,7 @@ class TranscriberWhisper;  // concrete class
 class ModelMgr;
 class GeneralModel;
 class ChatConversation;
+class Model;
 
 class AppEngine : public QObject
 {
@@ -45,6 +47,7 @@ class AppEngine : public QObject
     Q_PROPERTY(bool canPrepareforTranslate READ canPrepareForTranslate NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canStart READ canStart NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canStop READ canStop NOTIFY stateFlagsChanged)
+    Q_PROPERTY(bool canChangeConfig READ canChangeConfig NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool isBusy READ isBusy NOTIFY stateFlagsChanged)
     Q_PROPERTY(const qreal& recordingLevel MEMBER recording_level_ NOTIFY recordingLevelChanged)
     Q_PROPERTY(const QString& recordedText MEMBER current_recorded_text_ NOTIFY recordedTextChanged)
@@ -160,6 +163,7 @@ public:
     bool canStart()   const;
     bool canStop()    const;
     bool isBusy()     const;
+    bool canChangeConfig() const;
 
     template <typename T>
     constexpr bool stateIn(std::initializer_list<T> list) const noexcept
@@ -200,7 +204,7 @@ private:
     Mode mode() const { return mode_; }
     void setMode(Mode newMode);
     State state() const { return state_[static_cast<size_t>(mode())]; }
-    void setState(State newState);
+    void setState(State newState, const QString& text = {});
     void createPipelineIfNeeded();
     QCoro::Task<void> startPrepareForRecording();
     QCoro::Task<void> startPrepareForChat(QString modelName);
@@ -229,6 +233,7 @@ private:
     QCoro::Task<bool> sendTranslatePrompt(const QString& prompt);
     void prepareAvailableModels();
     void setRecordedText(const QString text);
+    void onModelChangedState(const Model *model, ModelState state);
 
     ChatMessagesModel chat_messages_model_;
     AvailableModelsModel chat_models_{ModelKind::GENERAL, "chat_model.selected"};

@@ -218,6 +218,7 @@ qt_add_qml_module(${PROJECT_NAME}
           QML_FILES qml/settings/GeneralSettings.qml
           QML_FILES qml/common.js
           SOURCES src/app/RewriteStyleModel.h src/app/RewriteStyleModel.cpp
+          SOURCES src/app/ModelState.h
 )
 
 # Add includepaths

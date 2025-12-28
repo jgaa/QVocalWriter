@@ -17,6 +17,7 @@ ScrollView {
         settings.setValue("logging/applevel", logLevelApp.currentIndex.toString())
         settings.setValue("logging/prune", prune.checked ? "true" : "false")
         settings.setValue("models/path", modelPath.text)
+        settings.setValue("logging/trivial.llm.forward", fwdModelMessages.checked ? "true" : "false")
         settings.sync()
     }
 
@@ -84,6 +85,13 @@ ScrollView {
             id: prune
             text: qsTr("Prune log-file when starting")
             checked: settings.value("logging/prune") === "true"
+        }
+
+        Item {}
+        CheckBox {
+            id: fwdModelMessages
+            text: qsTr("Forward trivial log message from models")
+            checked: settings.value("logging/trivial.llm.forward") === "true"
         }
 
         Label { text: qsTr("Models path")}

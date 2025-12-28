@@ -112,8 +112,9 @@ void AvailableModelsModel::setSelected(int index)
                 selected_model_name_.clear();
             }
         }
-        emit selectedChanged();
         QSettings{}.setValue(properties_tag_, QString::fromUtf8(selected_model_id_));
+        LOG_TRACE_N << "emitting selectedChanged signal";
+        emit selectedChanged();
     }
 }
 

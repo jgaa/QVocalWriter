@@ -66,9 +66,9 @@ QCoro::Task<bool> Transcriber::transcribeRecording()
 }
 
 void Transcriber::stopTranscribing() {
-    if (state() < State::STOPPING) {
+    if (state() < ModelState::STOPPING) {
         LOG_TRACE_EX(*this) << "Stopping transcriber.";
-        setState(State::STOPPING);
+        setState(ModelState::STOPPING);
     }
 }
 
@@ -133,7 +133,7 @@ bool Transcriber::transcribeSegments()
                                 << " bytes from file at offset "
                                 << (fc.offset + read + chunk_read);
                     emit errorOccurred("Transcriber: file read error");
-                    setState(State::ERROR);
+                    setState(ModelState::ERROR);
                     return false;;
                 }
                 chunk_read += static_cast<size_t>(bytes);
@@ -146,7 +146,7 @@ bool Transcriber::transcribeSegments()
                 } catch (const exception& ex) {
                     LOG_ERROR_EX(*this) << "Transcriber: exception during processChunk: " << ex.what();
                     emit errorOccurred(QString("Transcriber: exception during processChunk: %1").arg(ex.what()));
-                    setState(State::ERROR);
+                    setState(ModelState::ERROR);
                     return false;
                 }
             } else {
@@ -179,7 +179,7 @@ void Transcriber::processRecordingFromFile()
         if (bytes <= 0) {
             LOG_ERROR_EX(*this) << "Transcriber: failed to read from file during post-processing";
             emit errorOccurred("Transcriber: file read error during post-processing");
-            setState(State::ERROR);
+            setState(ModelState::ERROR);
             return;
         }
 

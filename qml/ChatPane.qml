@@ -55,18 +55,19 @@ Item {
                     ModelPicker {
                         id: modelCombo
                         Layout.fillWidth: true
+                        enabled: appEngine.canChangeConfig
                         model: appEngine.chatModels
                     }
 
                     Button {
                         text: qsTr("Prepare")
-                        enabled: appEngine.canPrepareForChat && root.hasModel
+                        enabled: appEngine.canPrepareforChat
                         onClicked: appEngine.prepareForChat()
                     }
 
                     Button {
                         text: qsTr("Clear")
-                        enabled: chatView.count > 0 && !appEngine.isBusy
+                        enabled: !appEngine.canChangeConfig
                         onClicked: clearChat()
                     }
                 }

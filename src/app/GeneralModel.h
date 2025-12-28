@@ -5,6 +5,7 @@
 
 class GeneralModel final : public Model
 {
+    Q_OBJECT
 public:
     GeneralModel(std::string name,
                  std::unique_ptr<Config> && config);
