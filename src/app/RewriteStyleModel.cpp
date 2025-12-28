@@ -1,5 +1,7 @@
 #include "RewriteStyleModel.h"
 
+using namespace std;
+
 namespace {
 
 // Prompts are templates with QString::arg placeholders:
@@ -14,6 +16,7 @@ Hard rules:
 - Do not invent facts. If something is unclear, either omit it or mark it as [unclear].
 - Keep the author's intent and voice, but remove filler, repetitions, and false starts.
 - Fix grammar, punctuation, and structure.
+- %2
 
 Output requirements:
 - Use Markdown.
@@ -34,6 +37,7 @@ Hard rules:
 - Remove filler words, repetitions, and tangents.
 - Keep tone professional, friendly, and direct.
 - Do not provide alternatives. Only one email as output.
+- %2
 
 Output requirements:
 - Provide: Subject line + email body.
@@ -51,6 +55,7 @@ Hard rules:
 - Keep wording safe and non-defamatory.
 - Preserve intent; remove fluff.
 - Add tags/hashtags if appropriate for the platform.
+- %2
 
 Output requirements:
 - Create a post suited for %1
@@ -63,6 +68,7 @@ Hard rules:
 - Do not invent APIs, commands, numbers, or behaviors.
 - If details are missing, add a “TBD / Unknown” note instead of guessing.
 - Prefer precise, unambiguous phrasing.
+- %2
 
 Output requirements (Markdown):
 - Overview
@@ -84,6 +90,7 @@ Extra constraints (if any): %1
 Hard rules:
 - Do not add attendees, decisions, or dates that are not present.
 - If names are unclear, keep them as spoken or mark [unknown speaker].
+- %2
 
 Output requirements (Markdown):
 - Summary (3–6 bullets)
@@ -102,6 +109,7 @@ Extra constraints (if any): %1
 Hard rules:
 - Do not invent facts; only reorganize and clarify what’s there.
 - If something is aspirational or vague, keep it as an assumption or a question.
+- %2
 
 Output requirements (Markdown):
 - One-sentence mission
@@ -126,6 +134,7 @@ Hard rules:
 - Stay faithful to the themes and content of the transcription.
 - You may improve imagery and flow, but do not introduce major new plot facts or real-world claims not implied.
 - Keep names/places consistent with what’s said; if unclear, choose neutral placeholders.
+- %2
 
 Output requirements:
 - Provide 3 options:
@@ -146,6 +155,7 @@ Hard rules (very important):
 - Preserve meaning; remove only disfluencies (uh, um), repetitions, and obvious transcription artifacts.
 - If a statement is ambiguous, keep it but mark [ambiguous] or [unclear].
 - Keep dates, numbers, and proper nouns exactly as spoken; if uncertain, mark [unclear].
+- %2
 
 Output requirements (plain, structured):
 - Header: “Memo”
@@ -166,6 +176,9 @@ Primary goal:
 - Preserve the emotional force, frustration, and strong opinions of the speaker.
 - Do NOT neutralize, soften, or “professionalize” the tone.
 - Do NOT add new arguments or facts.
+
+Hard rules:
+- %2
 
 Editing rules:
 - Remove filler words, repetition, and transcription artifacts.
@@ -189,6 +202,7 @@ Absolute rules:
 - Do NOT summarize, rephrase, or reorganize.
 - Do NOT add titles, headings, or conclusions.
 - Do NOT infer missing words or facts.
+- %2
 
 Allowed edits ONLY:
 - Remove filler words (um, uh, you know) when they clearly add no meaning.
@@ -320,14 +334,19 @@ QString RewriteStyleModel::settingsKey() const {
 }
 
 
-QString RewriteStyleModel::makePrompt() const
+QString RewriteStyleModel::makePrompt(std::string_view language) const
 {
+    string language_opt = "Do not translate. Detect and keep the original language.";
+    if (!language.empty()) {
+        language_opt = format("Do not translate. The language of this document is and must remain \"{}\"\n", language);
+    }
+
     const auto& it = items_[static_cast<size_t>(clampedSelected_())];
     if (it.prompt_index < 0) return {};
 
     const auto tmpl = prompts[static_cast<size_t>(it.prompt_index)];
     const QString qtmpl = QString::fromUtf8(tmpl.data(), int(tmpl.size()));
-    return qtmpl.arg(extra());
+    return qtmpl.arg(extra(), language_opt);
 }
 
 int RewriteStyleModel::clampedSelected_() const noexcept

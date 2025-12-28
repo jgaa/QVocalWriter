@@ -14,9 +14,11 @@ enum class PromptRole {
 };
 
 struct ChatMessage {
+
     PromptRole role;
     std::string content;
     bool completed{true}; // false during assistants partial updates
+    std::string stage;
     time_t timestamp{time(nullptr)};
     double duration_seconds{0.0}; // models time to generate a full response
     std::string model_used; // model that generated this message (for assistant role)

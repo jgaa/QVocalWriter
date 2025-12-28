@@ -55,6 +55,7 @@ class AppEngine : public QObject
     Q_PROPERTY(int currentMic READ currentMic WRITE setCurrentMic NOTIFY currentMicChanged)
     Q_PROPERTY(const QString& stateText READ stateText NOTIFY stateTextChanged)
     Q_PROPERTY(ChatMessagesModel* chatMessages READ chatMessages CONSTANT)
+    Q_PROPERTY(ChatMessagesModel* transcribeMessages READ transcribeMessages CONSTANT)
     Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged)
 
 public:
@@ -177,6 +178,7 @@ public:
     }
 
     ChatMessagesModel* chatMessages() { return &chat_messages_model_; }
+    ChatMessagesModel* transcribeMessages() { return &transcribe_messages_model_; }
 
     static void initLogging();
 
@@ -237,6 +239,7 @@ private:
     void onModelChangedState(const Model *model, ModelState state);
 
     ChatMessagesModel chat_messages_model_;
+    ChatMessagesModel transcribe_messages_model_;
     AvailableModelsModel chat_models_{ModelKind::GENERAL, "chat_model.selected"};
     AvailableModelsModel translation_models_{ModelKind::GENERAL, "translation_model.selected"};
     AvailableModelsModel live_transcribe_models_{ModelKind::WHISPER, "transcribe_model.live.selected"};
@@ -248,6 +251,7 @@ private:
     LanguagesModel doc_translate_languages_model_{"doc.translate.target-language", false};
     RewriteStyleModel rewrite_style_{"transcribe.doc.rewrite_style"};
     std::shared_ptr<ChatConversation> chat_conversation_; // the current conversation
+    std::shared_ptr<ChatConversation> transcribe_conversation_; // for transcription edits
     AudioController audio_controller_;
     states_t state_{State::Idle, State::Idle, State::Idle};
     state_text_t state_texts_{QString("Idle"), QString("Idle"), QString("Idle")};

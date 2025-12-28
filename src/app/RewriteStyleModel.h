@@ -103,7 +103,7 @@ public:
      *
      * If "None" is selected, returns an empty QString.
      */
-    Q_INVOKABLE QString makePrompt() const;
+    Q_INVOKABLE QString makePrompt(std::string_view language = {}) const;
 
 private:
     struct Item {

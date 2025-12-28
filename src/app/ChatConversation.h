@@ -28,6 +28,18 @@ public:
     void setModel(ChatMessagesModel *model);
     std::vector<const ChatMessage *> getMessages() const;
 
+    bool empty() const noexcept {
+        return messages_.empty();
+    }
+
+    ChatMessage *back() const {
+        if (empty()) {
+            return nullptr;
+        }
+
+        return messages_.back().get();
+    }
+
     /*! for continuation prompts.
      *  Sends system prompt as well if there is only one user message
      */

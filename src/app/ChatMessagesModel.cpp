@@ -197,6 +197,9 @@ QString ChatMessagesModel::actorName(const ChatMessage &msg) const
     case PromptRole::User:
         return tr("You");
     case PromptRole::Assistant:
+        if (!msg.stage.empty()) {
+            return QString::fromStdString(msg.stage);
+        }
         return tr("Assistant");
     default:
         return tr("system");
@@ -231,6 +234,9 @@ QJsonObject ChatMessagesModel::formatMessageAsJSON(const ChatMessage &msg) const
     if (msg.role == PromptRole::Assistant) {
         o["duration"] = msg.duration_seconds;
         o["model_used"] = QString::fromStdString(msg.model_used);
+        if (!msg.stage.empty()) {
+            o["stage"] = QString::fromStdString(msg.stage);
+        }
     }
     return o;
 }

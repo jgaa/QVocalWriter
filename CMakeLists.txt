@@ -222,6 +222,7 @@ qt_add_qml_module(${PROJECT_NAME}
           src/app/Transcriber.h
           src/app/TranscriberWhisper.cpp
           src/app/TranscriberWhisper.h
+          QML_FILES qml/MessagesView.qml
 )
 
 # Add includepaths

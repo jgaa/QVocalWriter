@@ -281,18 +281,24 @@ Item {
             }
         }
 
-        // Multiline text field with wrapped text
-        ScrollView {
+        // // Multiline text field with wrapped text
+        // ScrollView {
+        //     Layout.fillWidth: true
+        //     Layout.fillHeight: true
+        //     // Always show vertical scrollbar
+        //     ScrollBar.vertical.policy: ScrollBar.AlwaysOn
+        //     TextArea {
+        //         readOnly: true
+        //         wrapMode: Text.Wrap
+        //         text: appEngine.recordedText
+        //         placeholderText: qsTr("Transcript will appear here");
+        //     }
+        // }
+
+        MessagesView {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            // Always show vertical scrollbar
-            ScrollBar.vertical.policy: ScrollBar.AlwaysOn
-            TextArea {
-                readOnly: true
-                wrapMode: Text.Wrap
-                text: appEngine.recordedText
-                placeholderText: qsTr("Transcript will appear here");
-            }
+            model: appEngine.transcribeMessages
         }
 
         RowLayout {

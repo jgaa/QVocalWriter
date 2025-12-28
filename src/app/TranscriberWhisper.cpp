@@ -282,11 +282,11 @@ void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastCh
     }
 
     const QString full_text = assembleTranscript(segments_);
-    LOG_DEBUG_EX(*this) << "Emitting partial text:" << full_text;
-    emit partialTextAvailable(full_text);
+    final_text_ += full_text.toStdString();
+    LOG_DEBUG_EX(*this) << "Emitting partial text:" << final_text_;
+    emit partialTextAvailable(QString::fromStdString(final_text_));
 
     if (lastChunk) {
-        final_text_ = full_text.toStdString();
         LOG_DEBUG_EX(*this) << "Final text:" << final_text_;
         //emit finalTextAvailable(final_text_);
     }

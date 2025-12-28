@@ -826,6 +826,9 @@ QCoro::Task<void> AppEngine::startPrepareForRecording()
         file_writer_ = make_shared<AudioFileWriter>(recorder_->ringBuffer(), chunk_queue_.get(), pcm_file_path_);
     }
 
+    transcribe_conversation_ = make_shared<ChatConversation>("transcribe");
+    transcribe_conversation_->setModel(&transcribe_messages_model_);
+
     const auto ok = co_await prepareTranscriberModels();
     if (!ok) {
         failed(tr("Failed to prepare for recording"));
@@ -893,6 +896,7 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
     // Live transcriber.Optional.
     assert(rec_transcriber_ == nullptr);
 
+
     const bool have_rewrite_step = rewrite_style_.hasSelection() && doc_prepare_models_.hasSelection();
     const bool have_translate_step = doc_translate_models_.hasSelection() && doc_translate_languages_model_.haveSelection();
 
@@ -920,6 +924,23 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
                         false
                         ); !rec_transcriber_) {
                     co_return failed(tr("Failed to prepare live transcriber %1").arg(qid));
+                }
+
+                if (auto conversation = transcribe_conversation_) {
+                    conversation->addMessage(
+                        make_shared<ChatMessage>(PromptRole::Assistant,
+                                                 "",
+                                                 false,
+                                                 tr("Live transcript").toStdString()));
+
+                    // capture weak ptr to avoid cyclic ref
+                    auto wconversation = weak_ptr<ChatConversation>(conversation);
+                    connect(rec_transcriber_.get(),
+                            &Model::partialTextAvailable, [this, wconversation] (const QString& text) mutable {
+                        if (auto conversation = wconversation.lock()) {
+                            conversation->updateLastMessage(text.toStdString());
+                        }
+                    });
                 }
 
             } else {
@@ -1136,6 +1157,7 @@ QCoro::Task<void> AppEngine::onRecordingDone()
     LOG_DEBUG_N << "Recording done, starting post-processing transcription if needed";
 
     QString final_text;
+    // Each step adds their own agent messages to the conversation.
 
     setState(State::Processing, tr("Starting post-processing..."));
 
@@ -1143,6 +1165,12 @@ QCoro::Task<void> AppEngine::onRecordingDone()
         LOG_DEBUG_N << "Stopping live transcriber before post-processing";
         rec_transcriber_->stopTranscribing();
         final_text = QString::fromStdString(rec_transcriber_->finalText());
+
+        // We should only ever have a message in the conversation at this point if we had live transcription
+        if (auto * last = transcribe_conversation_->back()) {
+            transcribe_conversation_->updateLastMessage(final_text.toStdString());
+            transcribe_conversation_->finalizeLastMessage();
+        }
 
         co_await rec_transcriber_->stop();
         rec_transcriber_.reset();
@@ -1155,12 +1183,21 @@ QCoro::Task<void> AppEngine::onRecordingDone()
             co_await post_transcriber_->loadModel();
         }
 
+        auto msg = make_shared<ChatMessage>(PromptRole::Assistant, "",
+                                            false,
+                                            tr("Transcript").toStdString());
+        transcribe_conversation_->addMessage(msg);
+        ScopedTimer timer;
         if (!co_await post_transcriber_->transcribeRecording()) {
             failed(tr("Post-processing transcription failed"));
             co_return;
         }
+        msg->duration_seconds = timer.elapsed();
 
         final_text = QString::fromStdString(post_transcriber_->finalText());
+
+        transcribe_conversation_->updateLastMessage(final_text.toStdString());
+        transcribe_conversation_->finalizeLastMessage();
     }
 
     if (post_transcriber_ && post_transcriber_->isLoaded()) {
@@ -1180,7 +1217,11 @@ QCoro::Task<void> AppEngine::onRecordingDone()
 
         string formatted_prompt;
         {
-            const auto prompt = rewrite_style_.makePrompt();
+            string fromLng;
+            if (auto lngix = languageIndex(); lngix > 0) {
+                fromLng = languageList_.at(size_t(language_index_)).name.toStdString();
+            }
+            const auto prompt = rewrite_style_.makePrompt(fromLng);
 
             const array<ChatMessage, 2> msgs = {ChatMessage{PromptRole::System, prompt.toStdString()},
                                           {PromptRole::User, final_text.toStdString()}};
@@ -1192,6 +1233,12 @@ QCoro::Task<void> AppEngine::onRecordingDone()
             LOG_TRACE_N << "Document rewrite formatted prompt: " << formatted_prompt;
         }
 
+        auto msg = make_shared<ChatMessage>(PromptRole::Assistant, "",
+                                            false,
+                                            tr("Rewrite").toStdString());
+        transcribe_conversation_->addMessage(msg);
+        ScopedTimer timer;
+
         auto result = co_await doc_prepare_model_->prompt(std::move(formatted_prompt),
                                                           qvw::LlamaSessionCtx::Params::Balanced());
 
@@ -1201,6 +1248,10 @@ QCoro::Task<void> AppEngine::onRecordingDone()
         }
 
         final_text = QString::fromStdString(doc_prepare_model_->finalText());
+
+        msg->duration_seconds = timer.elapsed();
+        transcribe_conversation_->updateLastMessage(final_text.toStdString());
+        transcribe_conversation_->finalizeLastMessage();
 
         if (!(doc_translate_model_ && doc_translate_model_->modelInfo().id == doc_prepare_model_->modelInfo().id)) {
             co_await doc_prepare_model_->stop();
@@ -1232,8 +1283,14 @@ QCoro::Task<void> AppEngine::onRecordingDone()
             LOG_TRACE_N << "Document rewrite formatted prompt: " << formatted_prompt;
         }
 
+        auto msg = make_shared<ChatMessage>(PromptRole::Assistant, "",
+                                            false,
+                                            tr("Translate").toStdString());
+        transcribe_conversation_->addMessage(msg);
+        ScopedTimer timer;
         auto result = co_await doc_translate_model_->prompt(std::move(formatted_prompt),
                                                           qvw::LlamaSessionCtx::Params::TranslateStrict());
+        msg->duration_seconds = timer.elapsed();
 
         if (!result) {
             failed("Translation failed.");
@@ -1241,6 +1298,9 @@ QCoro::Task<void> AppEngine::onRecordingDone()
         }
 
         final_text = QString::fromStdString(doc_translate_model_->finalText());
+
+        transcribe_conversation_->updateLastMessage(final_text.toStdString());
+        transcribe_conversation_->finalizeLastMessage();
 
         co_await doc_translate_model_->stop();
         doc_translate_model_.reset();
@@ -1251,8 +1311,6 @@ QCoro::Task<void> AppEngine::onRecordingDone()
         co_await doc_prepare_model_->stop();
         doc_prepare_model_.reset();
     }
-
-    // TODO: Add translation from final_text
 
     setRecordedText(final_text);
     setState(State::Done);
