@@ -169,10 +169,17 @@ qt_add_qml_module(${PROJECT_NAME}
     URI ${PROJECT_NAME}
     VERSION 1.0
       QML_FILES
+          qml/AboutDlg.qml
           qml/ChatPane.qml
+          qml/DownloadProgress.qml
           qml/Main.qml
+          qml/ModelPicker.qml
           qml/RecordingLevel.qml
-          qml/RecordingPane.qml
+          qml/TranscribePane.qml
+          qml/TranslationPane.qml
+          qml/common.js
+          qml/settings/GeneralSettings.qml
+          qml/settings/SettingsDlg.qml
       SOURCES
           include/qvw/EngineBase.h
           include/qvw/LlamaEngine.h
@@ -190,35 +197,31 @@ qt_add_qml_module(${PROJECT_NAME}
           src/app/AudioRecorder.h
           src/app/AudioRingBuffer.cpp
           src/app/AudioRingBuffer.h
+          src/app/AvailableModelsModel.cpp
+          src/app/AvailableModelsModel.h
           src/app/ChatConversation.cpp
           src/app/ChatConversation.h
           src/app/ChatMessagesModel.cpp
           src/app/ChatMessagesModel.h
           src/app/GeneralModel.cpp
           src/app/GeneralModel.h
+          src/app/LanguagesModel.cpp
+          src/app/LanguagesModel.h
           src/app/Model.cpp
           src/app/Model.h
           src/app/ModelInfo.cpp
           src/app/ModelInfo.h
           src/app/ModelMgr.cpp
           src/app/ModelMgr.h
+          src/app/ModelState.h
           src/app/Queue.h
+          src/app/RewriteStyleModel.cpp
+          src/app/RewriteStyleModel.h
           src/app/ScopedTimer.h
           src/app/Transcriber.cpp
           src/app/Transcriber.h
           src/app/TranscriberWhisper.cpp
           src/app/TranscriberWhisper.h
-          SOURCES src/app/AvailableModelsModel.h src/app/AvailableModelsModel.cpp
-          QML_FILES qml/ModelPicker.qml
-          QML_FILES qml/DownloadProgress.qml
-          QML_FILES qml/TranslationPane.qml
-          SOURCES src/app/LanguagesModel.h src/app/LanguagesModel.cpp
-          QML_FILES qml/AboutDlg.qml
-          QML_FILES qml/settings/SettingsDlg.qml
-          QML_FILES qml/settings/GeneralSettings.qml
-          QML_FILES qml/common.js
-          SOURCES src/app/RewriteStyleModel.h src/app/RewriteStyleModel.cpp
-          SOURCES src/app/ModelState.h
 )
 
 # Add includepaths

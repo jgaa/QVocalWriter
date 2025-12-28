@@ -9,24 +9,7 @@ import QVocalWriter
 Item {
     id: root
     implicitHeight: column.implicitHeight
-
-    function indexOfModel(model, name) {
-        if (!model || !name)
-            return -1
-
-        for (let i = 0; i < model.length; ++i) {
-            if (model[i] === name)
-                return i
-        }
-        return -1
-    }
-
-    function nameAtIndex(model, index) {
-        if (!model || index < 0 || index >= model.length)
-            return ""
-        return model[index]
-    }
-
+    property bool canChangeSettings: appEngine.state === AppEngine.Idle
 
     ColumnLayout {
         id: column
@@ -54,7 +37,7 @@ Item {
                         appEngine.currentMic = currentIndex
                 }
 
-                enabled: appEngine.state === AppEngine.Idle
+                enabled: root.canChangeSettings
             }
         }
 
@@ -80,8 +63,7 @@ Item {
                         appEngine.languageIndex = currentIndex
                 }
 
-                enabled: appEngine.state === AppEngine.Idle
-                      || appEngine.state === AppEngine.Error
+                enabled: root.canChangeSettings
             }
         }
 
@@ -98,6 +80,7 @@ Item {
             ModelPicker {
                 Layout.fillWidth: true
                 model: appEngine.liveTranscribeModels
+                enabled: root.canChangeSettings
             }
         }
 
@@ -113,6 +96,7 @@ Item {
             ModelPicker {
                 Layout.fillWidth: true
                 model: appEngine.postTranscribeModels
+                enabled: root.canChangeSettings
             }
         }
 
@@ -129,6 +113,7 @@ Item {
                 id: docPrepareModelPicker
                 Layout.fillWidth: true
                 model: appEngine.docPrepareModels
+                enabled: root.canChangeSettings
             }
         }
 
@@ -150,12 +135,14 @@ Item {
                 //valueRole: "kind"
                 currentIndex: model.selected
                 onCurrentIndexChanged: model.selected = currentIndex
+                enabled: root.canChangeSettings
             }
 
             ComboBox {
                 id: socialMediaType
                 Layout.fillWidth: rewriteStyleCombo
                 visible: rewriteStyleCombo.model.isSocialMedia
+                enabled: root.canChangeSettings
                 model: [
                            "X/Twitter",
                            "Linkedin",
@@ -183,6 +170,7 @@ Item {
             ModelPicker {
                 id: docTranslateModelPicker
                 Layout.fillWidth: true
+                enabled: root.canChangeSettings
                 model: appEngine.docTranslateModels
             }
 
@@ -199,6 +187,7 @@ Item {
                 textRole: "name"
                 valueRole: "code"
                 visible: docTranslateModelPicker.model.hasSelection
+                enabled: root.canChangeSettings
 
                 // LanguagesModel carries selection; keep QML simple:
                 currentIndex: appEngine.docTranslateLanguages.selected
@@ -211,7 +200,7 @@ Item {
             id: prepareButton
             Layout.fillWidth: true
             text: qsTr("Prepare")
-            enabled: appEngine.canPrepare
+            enabled: appEngine.canPrepareForTranscribe
             onClicked: appEngine.prepareForRecording()
         }
 
@@ -322,6 +311,7 @@ Item {
                 text: qsTr("Reset")
                 enabled: appEngine.state == AppEngine.Done
                       || appEngine.state == AppEngine.Error
+                      || appEngine.state == AppEngine.Ready
                 onClicked: {
                     appEngine.reset();
                 }

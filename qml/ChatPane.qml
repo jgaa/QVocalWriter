@@ -10,19 +10,8 @@ Item {
     implicitHeight: column.implicitHeight
 
     // local UI state
-    //property string selectedModelName: modelCombo.currentText
     property bool hasModel: modelCombo.currentIndex >= 0
     property string lastChatError: ""
-
-    function isUserActor(actor) {
-        if (actor === undefined || actor === null)
-            return false
-        if (typeof actor === "string")
-            return actor.toLowerCase() === "user" || actor.toLowerCase() === "human"
-        if (typeof actor === "number")
-            return actor === 0 // common convention: 0 = user
-        return false
-    }
 
     function clearChat() {
         root.lastChatError = ""
@@ -137,6 +126,8 @@ Item {
                         required property bool isUser
                         required property bool isAssistant
                         required property int index
+                        required property double duration
+                        required property string modelId
 
                         spacing: 6
 
@@ -148,6 +139,20 @@ Item {
                                 text: actor
                                 font.bold: true
                                 opacity: 0.8
+                            }
+
+                            Label {
+                                text: modelId
+                                visible: isAssistant
+                            }
+
+                            Label {
+                                text: qsTr("durtation: %1s").arg(duration.toFixed(2))
+                                visible: isAssistant && completed && duration > 0
+                                font.italic: true
+                            }
+
+                            Item {
                                 Layout.fillWidth: true
                             }
 

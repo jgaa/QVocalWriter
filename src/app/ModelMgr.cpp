@@ -155,12 +155,12 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
     // ---- Extreme (≈128+ GB / “use all the RAM”) ----
     // Higher-quality (still single-file) 70B option:
     {
-        "extreme",
+        "extreme 128+ GB",
         "llama3.1-70b-instruct-q5_k_s",
         ModelInfo::PromptStyle::Llama3,
         "Meta-Llama-3.1-70B-Instruct-Q5_K_S.gguf",
         mi_t::Q5_1,
-        48660,
+        48657,
         "",
         mi_t::Chat | mi_t::Rewrite,
         "https://huggingface.co/bartowski/Meta-Llama-3.1-70B-Instruct-GGUF/resolve/main/"
@@ -200,6 +200,18 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         "",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
         "https://huggingface.co/DavidAU/OpenAi-GPT-oss-20b-HERETIC-uncensored-NEO-Imatrix-gguf/resolve/main/OpenAI-20B-NEOPlus-Uncensored-Q5_1.gguf?download=true"
+    },
+
+    {
+        "VibeStudio/Nidum-Gemma-2B-Uncensored-GGUF",
+        "Nidum-Limitless-Gemma-2B-F16",
+        ModelInfo::PromptStyle::Gemma,
+        "Nidum-Limitless-Gemma-2B-F16.gguf",
+        mi_t::FP16,
+        5018,
+        "",
+        mi_t::Chat | mi_t::Rewrite,
+        "https://huggingface.co/VibeStudio/Nidum-Gemma-2B-Uncensored-GGUF/resolve/main/Nidum-Limitless-Gemma-2B-F16.gguf?download=true"
     }
 });
 
@@ -263,6 +275,12 @@ models_t ModelMgr::availableModels(ModelKind kind, ModelInfo::Capability purpose
             models.push_back(&m);
         }
     }
+
+    // Sort by size, small first
+    std::sort(models.begin(), models.end(),
+              [](const ModelInfo *a, const ModelInfo *b) {
+        return a->size_mb < b->size_mb;
+    });
 
     LOG_TRACE_N << "Found " << models.size()
                 << " models for kind=" << kind

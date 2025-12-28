@@ -19,6 +19,7 @@ struct ChatMessage {
     bool completed{true}; // false during assistants partial updates
     time_t timestamp{time(nullptr)};
     double duration_seconds{0.0}; // models time to generate a full response
+    std::string model_used; // model that generated this message (for assistant role)
 };
 
 using messages_view_t = std::span<const ChatMessage * const>;
@@ -29,6 +30,7 @@ struct ModelInfo {
         Llama3,
         ChatML,
         Mistral,
+        Gemma,
         Raw
     };
 

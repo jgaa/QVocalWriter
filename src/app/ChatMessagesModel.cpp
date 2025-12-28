@@ -161,6 +161,16 @@ QVariant ChatMessagesModel::data(const QModelIndex &index, int role) const
         return msg.role == PromptRole::User;
     case Roles::IsAssistant:
         return msg.role == PromptRole::Assistant;
+    case Roles::Duration:
+        if (msg.role == PromptRole::Assistant) {
+            return msg.duration_seconds;
+        }
+        return {};
+    case Roles::ModelId:
+        if (msg.role == PromptRole::Assistant) {
+            return QString::fromStdString(msg.model_used);
+        }
+        return {};
     default:
         break;
     }
@@ -176,6 +186,8 @@ QHash<int, QByteArray> ChatMessagesModel::roleNames() const
     roles[static_cast<int>(Roles::Completed)] = "completed";
     roles[static_cast<int>(Roles::IsUser)] = "isUser";
     roles[static_cast<int>(Roles::IsAssistant)] = "isAssistant";
+    roles[static_cast<int>(Roles::Duration)] = "duration";
+    roles[static_cast<int>(Roles::ModelId)] = "modelId";
     return roles;
 }
 
@@ -216,6 +228,9 @@ QJsonObject ChatMessagesModel::formatMessageAsJSON(const ChatMessage &msg) const
     o["role"] = actorName(msg);
     o["content"] = QString::fromStdString(msg.content);
     o["timestamp"] = QDateTime::fromSecsSinceEpoch(msg.timestamp).toString(Qt::ISODate);
-    o["duration"] = msg.duration_seconds;
+    if (msg.role == PromptRole::Assistant) {
+        o["duration"] = msg.duration_seconds;
+        o["model_used"] = QString::fromStdString(msg.model_used);
+    }
     return o;
 }

@@ -33,7 +33,9 @@ public:
         Message,
         Completed,
         IsUser,
-        IsAssistant
+        IsAssistant,
+        Duration,
+        ModelId
     };
 
     enum class Format {

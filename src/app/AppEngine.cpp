@@ -19,6 +19,7 @@
 #include "AudioCaptureDevice.h"
 #include "GeneralModel.h"
 #include "ChatConversation.h"
+#include "ScopedTimer.h"
 
 #include "logging.h"
 
@@ -190,7 +191,7 @@ void AppEngine::stopRecording()
 
 void AppEngine::prepareForRecording()
 {
-    if (!canPrepare()) {
+    if (!canPrepareForTranscribe()) {
         failed("Cannot prepare in this state.");
         return;
     }
@@ -213,6 +214,12 @@ void AppEngine::prepareForTranslation()
     startPrepareForTranslation();
 }
 
+void AppEngine::resetTranslationState()
+{
+    translate_model_.reset();
+    setState(State::Idle);
+}
+
 void AppEngine::chatPrompt(const QString &prompt)
 {
     sendChatPrompt(prompt);
@@ -223,7 +230,7 @@ void AppEngine::translate(const QString &text)
     sendTranslatePrompt(text);
 }
 
-QCoro::Task<bool> AppEngine::sendChatPrompt(const QString &prompt)
+QCoro::Task<bool> AppEngine::sendChatPrompt(QString prompt)
 {
     if (!chat_model_) {
         failed("Chat model is not prepared.");
@@ -235,7 +242,26 @@ QCoro::Task<bool> AppEngine::sendChatPrompt(const QString &prompt)
         co_return false;
     }
 
-    LOG_INFO_N << "Sending chat prompt: " << prompt;
+    //QSettings settings;
+
+    // if (settings.value("models/send.datetime", false).toBool()) {
+    //     const auto tz = QTimeZone::systemTimeZone();
+    //     const auto now = std::chrono::system_clock::now();
+
+    //     const auto datetime_str = QString::fromUtf8(
+    //         std::format(
+    //             "{:%FT%T}",
+    //             std::chrono::floor<std::chrono::seconds>(now)
+    //         )
+    //     );
+    //     prompt = QString("META BEGIN Current date time is %1 GMT. Timezone is %2. META END\n%3")
+    //                 .arg(datetime_str,
+    //                      QString::fromUtf8(tz.id()),
+    //                      prompt);
+    // }
+
+
+    LOG_TRACE_N << "Sending chat prompt: " << prompt;
 
     // TODO: Compress conversation history summaries if we run out of tokens for the model
 
@@ -252,7 +278,9 @@ QCoro::Task<bool> AppEngine::sendChatPrompt(const QString &prompt)
     setState(State::Processing);
 
     // Handle partial updates
-    current_conversation->addMessage(make_shared<ChatMessage>(PromptRole::Assistant, ""));
+    auto msg = make_shared<ChatMessage>(PromptRole::Assistant, "");
+    msg->model_used = chat_model_->modelInfo().id;
+    current_conversation->addMessage(msg);
 
     connect(chat_model_.get(), &Model::partialTextAvailable, [this](const QString& msg) {
         LOG_TRACE_N << "Chat model partial text available: " << msg;
@@ -263,8 +291,10 @@ QCoro::Task<bool> AppEngine::sendChatPrompt(const QString &prompt)
 
     // TODO: Handle replay of the full conversation if we resumed an existing one from storage.
     // Conversation continuation is handled by the model context params.
+    ScopedTimer timer;
     auto result = co_await chat_model_->prompt(std::move(formatted_prompt),
                                                qvw::LlamaSessionCtx::Params::Chat(true));
+    msg->duration_seconds = timer.elapsed();
     assert(current_conversation);
     assert(chat_model_);
 
@@ -632,7 +662,7 @@ QStringList AppEngine::translateModels() const
     return models;
 }
 
-bool AppEngine::canPrepare() const
+bool AppEngine::canPrepareForTranscribe() const
 {
     const bool have_selecion = live_transcribe_models_.hasSelection()
                                || post_transcribe_models_.hasSelection();
@@ -647,7 +677,7 @@ bool AppEngine::canPrepareForChat() const
 
 bool AppEngine::canPrepareForTranslate() const
 {
-    return state() == State::Idle && !translation_models_.hasSelection();
+    return state() == State::Idle && translation_models_.hasSelection();
 }
 
 bool AppEngine::canStart() const
@@ -768,7 +798,7 @@ void AppEngine::setState(State newState, const QString& text)
 QCoro::Task<void> AppEngine::startPrepareForRecording()
 {
     LOG_INFO_N << "Preparing for recording";
-    setState(State::Preparing);
+    setState(State::Preparing, tr("Preparing for transcript..."));
 
     if (!chunk_queue_) {
         chunk_queue_ = make_shared<chunk_queue_t>();
@@ -836,7 +866,7 @@ QCoro::Task<void> AppEngine::startPrepareForChat(QString id)
 QCoro::Task<void> AppEngine::startPrepareForTranslation()
 {
     LOG_INFO_N << "Preparing for translation with model: " << translation_models_.currentId();
-    setStateText(tr("Preparing translation model..."));
+    setState(State::Preparing, tr("Preparing translation model..."));
 
     auto mi = ModelMgr::instance().findModelById(
         ModelKind::GENERAL,

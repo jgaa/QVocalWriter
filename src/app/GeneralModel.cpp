@@ -38,6 +38,7 @@ QCoro::Task<bool> GeneralModel::prompt(std::string text, const qvw::LlamaSession
 
         final_text_.clear();
 
+        LOG_TRACE_EX(*this) << "Starting prompt.: " << text;
         ScopedTimer timer;
         const bool result = session_ctx_->prompt(text, params);
 

@@ -15,6 +15,7 @@ class LanguagesModel : public QAbstractListModel
 
     Q_PROPERTY(int selected READ selected WRITE setSelected NOTIFY selectedChanged)
     Q_PROPERTY(QString selectedCode READ selectedCode WRITE setSelectedCode  NOTIFY selectedChanged)
+    Q_PROPERTY(bool haveSelection READ haveSelection NOTIFY selectedChanged)
 
 public:
     enum class Roles {

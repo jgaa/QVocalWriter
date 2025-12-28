@@ -42,7 +42,7 @@ class AppEngine : public QObject
     Q_PROPERTY(RewriteStyleModel *rewriteStyle READ rewriteStyle CONSTANT)
     Q_PROPERTY(int languageIndex READ languageIndex WRITE setLanguageIndex NOTIFY languageIndexChanged)
     Q_PROPERTY(QString chatModelName READ chatModelName() NOTIFY chatModelNameChanged)
-    Q_PROPERTY(bool canPrepare READ canPrepare NOTIFY stateFlagsChanged)
+    Q_PROPERTY(bool canPrepareForTranscribe READ canPrepareForTranscribe NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canPrepareforChat READ canPrepareForChat NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canPrepareforTranslate READ canPrepareForTranslate NOTIFY stateFlagsChanged)
     Q_PROPERTY(bool canStart READ canStart NOTIFY stateFlagsChanged)
@@ -99,6 +99,7 @@ public:
     Q_INVOKABLE void prepareForRecording();
     Q_INVOKABLE void prepareForChat();
     Q_INVOKABLE void prepareForTranslation();
+    Q_INVOKABLE void resetTranslationState();
     Q_INVOKABLE void chatPrompt(const QString& prompt);
     Q_INVOKABLE void translate(const QString& text);
     Q_INVOKABLE void saveTranscriptToFile(const QUrl &path);
@@ -157,7 +158,7 @@ public:
     std::string getChatSystemPrompt() const;
 
 
-    bool canPrepare() const;
+    bool canPrepareForTranscribe() const;
     bool canPrepareForChat() const;
     bool canPrepareForTranslate() const;
     bool canStart()   const;
@@ -229,7 +230,7 @@ private:
     }
     void setStateText(QString text = {});
     void prepareLanguages();
-    QCoro::Task<bool> sendChatPrompt(const QString& prompt);
+    QCoro::Task<bool> sendChatPrompt(QString prompt);
     QCoro::Task<bool> sendTranslatePrompt(const QString& prompt);
     void prepareAvailableModels();
     void setRecordedText(const QString text);

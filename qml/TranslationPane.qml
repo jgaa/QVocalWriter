@@ -16,7 +16,7 @@ Item {
         lastTranslateError = ""
         inputEdit.text = ""
         outputEdit.text = ""
-        // optional: appEngine.resetTranslationState()
+        appEngine.resetTranslationState()
     }
 
     ColumnLayout {
@@ -44,6 +44,7 @@ Item {
                     ModelPicker {
                         id: modelCombo
                         Layout.fillWidth: true
+                        enabled: appEngine.canChangeConfig
                         model: appEngine.translationModels
                     }
 
@@ -55,7 +56,7 @@ Item {
 
                     Button {
                         text: qsTr("Clear")
-                        enabled: (!appEngine.isBusy) && (inputEdit.text.length > 0 || outputEdit.text.length > 0)
+                        enabled: !appEngine.canChangeConfig
                         onClicked: clearAll()
                     }
                 }
@@ -212,7 +213,9 @@ Item {
                     Button {
                         id: translateButton
                         text: qsTr("Translate")
-                        enabled: !appEngine.isBusy && inputEdit.text.trim().length > 0
+                        enabled: appEngine.state === AppEngine.Ready
+                                 && inputEdit.length > 0
+                                 && targetLang.model.haveSelection
                         onClicked: {
                             const t = inputEdit.text.trim()
                             if (!t.length) return

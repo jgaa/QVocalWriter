@@ -200,6 +200,58 @@ std::string ModelInfo::formatPrompt(messages_view_t messages) const {
         break;
     }
 
+    case PromptStyle::Gemma: {
+        // Gemma chat template (most common):
+        // <start_of_turn>user\n...\n<end_of_turn>\n
+        // <start_of_turn>model\n...\n<end_of_turn>\n
+        // ...
+        // and if we want the model to answer, end with:
+        // <start_of_turn>model\n
+        static constexpr std::string_view SOT = "<start_of_turn>";
+        static constexpr std::string_view EOT = "<end_of_turn>";
+
+        // Gemma doesn't reliably support a distinct "system" role token across runtimes.
+        // Most compatible: fold system prompt into the first user message.
+        const std::string_view sys = has_system_first(messages) ? messages.front()->content : std::string_view{};
+        const auto msgs = without_system(messages);
+
+        bool system_injected = false;
+
+        for (const auto & m : msgs) {
+            switch (m->role) {
+            case PromptRole::User: {
+                std::string content = m->content;
+
+                if (!sys.empty() && !system_injected) {
+                    // Put system instructions *before* the first user content.
+                    // You can tweak the label or separators if you prefer.
+                    content = std::string(sys) + "\n\n" + content;
+                    system_injected = true;
+                }
+
+                oss << std::format("{}user\n{}\n{}\n", SOT, content, EOT);
+                break;
+            }
+
+            case PromptRole::Assistant:
+                // Gemma uses "model" for assistant turns.
+                oss << std::format("{}model\n{}\n{}\n", SOT, m->content, EOT);
+                break;
+
+            case PromptRole::System:
+                // If a system message appears later (unexpected), include it safely:
+                oss << std::format("{}user\n{}\n{}\n", SOT, m->content, EOT);
+                break;
+            }
+        }
+
+        if (open_assistant_turn) {
+            oss << std::format("{}model\n", SOT);
+        }
+        break;
+    }
+
+
     case PromptStyle::None:
         // handled above
         break;

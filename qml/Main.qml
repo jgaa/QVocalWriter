@@ -142,7 +142,7 @@ Window {
                 currentIndex: appEngine.mode
 
                 // 0: TRANSCRIBE – reuse RecordingPane
-                RecordingPane {
+                TranscribePane {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                 }
