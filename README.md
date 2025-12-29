@@ -5,7 +5,7 @@ It started as a speech-to-text tool for long-form writing and has grown into a m
 toolset with independent features for **transcription**, **translation**, and **assistant-based chat**.
 
 The project is under active initial development, with an emphasis on clean C++ APIs, a QML-based UI,
-and extensibility across platforms.
+and extensibility across platforms. It's currently somewhere between a POC and a MVP.
 
 The focus remains on:
 
