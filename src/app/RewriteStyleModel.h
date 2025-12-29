@@ -34,7 +34,7 @@ class RewriteStyleModel final : public QAbstractListModel
     QML_ELEMENT
 
     Q_PROPERTY(int selected READ selected WRITE setSelected NOTIFY selectedChanged)
-    Q_PROPERTY(QString socialMedia MEMBER social_media_type_ NOTIFY selectedChanged)
+    Q_PROPERTY(QString socialMedia READ socialMediaType WRITE setSocialMediaType NOTIFY selectedChanged)
     Q_PROPERTY(bool isSocialMedia READ isSocialMedia NOTIFY selectedChanged)
 
 public:
@@ -89,6 +89,8 @@ public:
     Q_INVOKABLE QString selectedName() const;
 
     QString socialMediaType() const;
+
+    void setSocialMediaType(const QString& type);
 
     // ---- Settings ----
     QString settingsKey() const;

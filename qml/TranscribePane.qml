@@ -140,22 +140,26 @@ Item {
 
             ComboBox {
                 id: socialMediaType
-                Layout.fillWidth: rewriteStyleCombo
-                visible: rewriteStyleCombo.model.isSocialMedia
-                enabled: root.canChangeSettings
-                model: [
-                           "X/Twitter",
-                           "Linkedin",
-                           "Reddit",
-                           "Facebook",
-                           "Instagram",
-                           "TikTok",
-                           qsTr("Work/intranet"),
-                           qsTr("Generic")
-                       ]
                 editable: true
-                onCurrentIndexChanged: rewriteStyleCombo.model.socialMedia = currentText
+                model: [
+                    "X/Twitter", "Linkedin", "Reddit", "Facebook",
+                    "Instagram", "TikTok", qsTr("Work/intranet"), qsTr("Generic")
+                ]
+
+                function syncToCpp() {
+                    rewriteStyleCombo.model.socialMedia = editable ? editText : currentText
+                }
+
+                // When user types (this is the important one)
+                onEditTextChanged: syncToCpp()
+
+                // When user selects an item
+                onActivated: syncToCpp()      // or onCurrentIndexChanged if you prefer
+
+                // When user presses Enter in the editor
+                onAccepted: syncToCpp()
             }
+
         }
 
         RowLayout {

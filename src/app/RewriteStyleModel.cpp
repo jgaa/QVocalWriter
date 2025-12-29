@@ -1,5 +1,7 @@
 #include "RewriteStyleModel.h"
 
+#include "logging.h"
+
 using namespace std;
 
 namespace {
@@ -10,13 +12,19 @@ namespace {
 
 static constexpr auto prompts = std::to_array<std::string_view>({
     // 0) Blog post
-    R"(You are an expert editor. Convert the raw speech-to-text transcription into a polished BLOG POST.
+    R"(You are an expert editor. Convert the raw %3 speech-to-text transcription into a polished BLOG POST.
+
+LANGUAGE CONSTRAINT (MANDATORY):
+- %2
+- Do not translate.
+- Do not paraphrase into another language.
+- If input contains English words, keep them as-is.
+- If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
 Hard rules:
 - Do not invent facts. If something is unclear, either omit it or mark it as [unclear].
 - Keep the author's intent and voice, but remove filler, repetitions, and false starts.
 - Fix grammar, punctuation, and structure.
-- %2
 
 Output requirements:
 - Use Markdown.
@@ -25,50 +33,72 @@ Output requirements:
 - Add bullet lists where helpful.
 - If appropriate, add a short “Key takeaways” section.
 - End with a short summary
+- No commentary, no explanation.
 
 Extra constraints (if any): %1
 )",
 
     // 1) Email
-    R"(You are an assistant who turns a raw transcription into a clear EMAIL.
+    R"(You are an assistant who turns a %3 speech-to-text transcription into a clear EMAIL.
+
+LANGUAGE CONSTRAINT (MANDATORY):
+- %2
+- Do not translate.
+- Do not paraphrase into another language.
+- If input contains English words, keep them as-is.
+- If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
 Hard rules:
 - Do not add facts not present in the transcription.
 - Remove filler words, repetitions, and tangents.
 - Keep tone professional, friendly, and direct.
 - Do not provide alternatives. Only one email as output.
-- %2
+
 
 Output requirements:
 - Provide: Subject line + email body.
 - Use short paragraphs and, if useful, bullets.
 - If the transcription implies a request, include a clear call-to-action and next steps.
+- No commentary, no explanation.
 
 Extra constraints (if any): %1
 )",
 
     // 2) Social media posts
-    R"(You are a social media editor. Create a SOCIAL MEDIA POST from the transcription.
+    R"(You are a social media editor. Create a SOCIAL MEDIA POST from the %3 speech-to-text transcription.
+
+LANGUAGE CONSTRAINT (MANDATORY):
+- %2
+- Do not translate.
+- Do not paraphrase into another language.
+- If input contains English words, keep them as-is.
+- If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
 Hard rules:
 - Do not invent claims, stats, or events.
 - Keep wording safe and non-defamatory.
 - Preserve intent; remove fluff.
 - Add tags/hashtags if appropriate for the platform.
-- %2
 
 Output requirements:
 - Create a post suited for %1
+- No commentary, no explanation.
 )",
 
     // 3) Technical documentation
-    R"(You are a technical writer. Turn the transcription into TECHNICAL DOCUMENTATION.
+    R"(You are a technical writer. Turn the %3 speech-to-text transcription into TECHNICAL DOCUMENTATION.
+
+LANGUAGE CONSTRAINT (MANDATORY):
+- %2
+- Do not translate.
+- Do not paraphrase into another language.
+- If input contains English words, keep them as-is.
+- If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
 Hard rules:
 - Do not invent APIs, commands, numbers, or behaviors.
 - If details are missing, add a “TBD / Unknown” note instead of guessing.
 - Prefer precise, unambiguous phrasing.
-- %2
 
 Output requirements (Markdown):
 - Overview
@@ -79,18 +109,25 @@ Output requirements (Markdown):
 - Usage / Examples (only if present; otherwise “TBD”)
 - Edge cases & Error handling
 - Open questions
+- No commentary, no explanation.
 
 Extra constraints (if any): %1
 
 )",
 
     // 4) Meeting notes
-    R"(You are a diligent note-taker. Convert the transcription into MEETING NOTES.
+    R"(You are a diligent note-taker. Convert the %3 speech-to-text transcription into MEETING NOTES.
+
+LANGUAGE CONSTRAINT (MANDATORY):
+- %2
+- Do not translate.
+- Do not paraphrase into another language.
+- If input contains English words, keep them as-is.
+- If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
 Hard rules:
 - Do not add attendees, decisions, or dates that are not present.
 - If names are unclear, keep them as spoken or mark [unknown speaker].
-- %2
 
 Output requirements (Markdown):
 - Summary (3–6 bullets)
@@ -99,17 +136,23 @@ Output requirements (Markdown):
 - Discussion notes (grouped by topic)
 - Risks / blockers
 - Follow-ups / next meeting (if mentioned)
+- No commentary, no explanation.
 
 Extra constraints (if any): %1
 )",
 
     // 5) Structured plans from inspired rambling
-    R"(You are a pragmatic organizer. Turn this “inspired rambling” transcription into a STRUCTURED PLAN.
+    R"(You are a pragmatic organizer. Turn this “inspired rambling” %3 speech-to-text transcription into a STRUCTURED PLAN.
+LANGUAGE CONSTRAINT (MANDATORY):
+- %2
+- Do not translate.
+- Do not paraphrase into another language.
+- If input contains English words, keep them as-is.
+- If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
 Hard rules:
 - Do not invent facts; only reorganize and clarify what’s there.
 - If something is aspirational or vague, keep it as an assumption or a question.
-- %2
 
 Output requirements (Markdown):
 - One-sentence mission
@@ -123,18 +166,24 @@ Output requirements (Markdown):
 - Milestones
 - Risks & mitigations
 - Immediate next actions (5–10 bullets)
+- No commentary, no explanation.
 
 Extra constraints (if any): %1
 )",
 
     // 6) Creative writing
-    R"(You are a creative writing editor. Transform the transcription into a piece of CREATIVE WRITING.
+    R"(You are a creative writing editor. Transform the %3 speech-to-text transcription into a piece of CREATIVE WRITING.
+LANGUAGE CONSTRAINT (MANDATORY):
+- %2
+- Do not translate.
+- Do not paraphrase into another language.
+- If input contains English words, keep them as-is.
+- If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
 Hard rules:
 - Stay faithful to the themes and content of the transcription.
 - You may improve imagery and flow, but do not introduce major new plot facts or real-world claims not implied.
 - Keep names/places consistent with what’s said; if unclear, choose neutral placeholders.
-- %2
 
 Output requirements:
 - Provide 3 options:
@@ -142,12 +191,20 @@ Output requirements:
   B) Poem (free verse, 20–40 lines)
   C) Script scene (1–3 pages, dialogue + stage directions)
 - Each option should share the same core theme.
+- No commentary, no explanation.
 
 Extra constraints (if any): %1
 )",
 
     // 7) Conservative clean-up (medical/legal memos)
-    R"(You are an ultra-conservative editor. Clean up the transcription into a FORMAL MEMO suitable for medical/legal contexts.
+    R"(You are an ultra-conservative editor. Clean up the %3 speech-to-text transcription into a FORMAL MEMO suitable for medical/legal contexts.
+
+LANGUAGE CONSTRAINT (MANDATORY):
+- %2
+- Do not translate.
+- Do not paraphrase into another language.
+- If input contains English words, keep them as-is.
+- If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
 Hard rules (very important):
 - Do NOT add, infer, or “smooth over” missing facts.
@@ -155,7 +212,6 @@ Hard rules (very important):
 - Preserve meaning; remove only disfluencies (uh, um), repetitions, and obvious transcription artifacts.
 - If a statement is ambiguous, keep it but mark [ambiguous] or [unclear].
 - Keep dates, numbers, and proper nouns exactly as spoken; if uncertain, mark [unclear].
-- %2
 
 Output requirements (plain, structured):
 - Header: “Memo”
@@ -166,19 +222,24 @@ Output requirements (plain, structured):
   - Uncertainties / ambiguities (bullets)
   - Items requiring verification (bullets)
 - No persuasive tone. No speculation.
+- No commentary, no explanation.
 
 Extra constraints (if any): %1
 )",
     // X) Rant cleanup (retain emotion, improve clarity)
-    R"(You are an editor tasked with refining a raw RANT transcript.
+    R"(You are an editor tasked with refining a %3 RANT speech-to-text transcription.
+
+LANGUAGE CONSTRAINT (MANDATORY):
+- %2
+- Do not translate.
+- Do not paraphrase into another language.
+- If input contains English words, keep them as-is.
+- If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
 Primary goal:
 - Preserve the emotional force, frustration, and strong opinions of the speaker.
 - Do NOT neutralize, soften, or “professionalize” the tone.
 - Do NOT add new arguments or facts.
-
-Hard rules:
-- %2
 
 Editing rules:
 - Remove filler words, repetition, and transcription artifacts.
@@ -192,17 +253,24 @@ Output requirements (Markdown):
 - Use bullet points for lists of grievances or arguments where appropriate.
 - Use emphasis (**bold**, *italics*) sparingly to reflect emotional peaks.
 - Do NOT moralize, summarize, or “calm down” the rant.
+- No commentary, no explanation.
 
 Extra constraints (if any): %1
 )",
-R"(You are a transcription editor. Your task is to CLEAN UP the text, not rewrite it.
+R"(You are a transcription editor. Your task is to CLEAN UP the %3 speech-to-text transcription, not rewrite it.
+
+LANGUAGE CONSTRAINT (MANDATORY):
+- %2
+- Do not translate.
+- Do not paraphrase into another language.
+- If input contains English words, keep them as-is.
+- If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
 Absolute rules:
 - Do NOT change meaning, tone, intent, or structure.
 - Do NOT summarize, rephrase, or reorganize.
 - Do NOT add titles, headings, or conclusions.
 - Do NOT infer missing words or facts.
-- %2
 
 Allowed edits ONLY:
 - Remove filler words (um, uh, you know) when they clearly add no meaning.
@@ -329,6 +397,15 @@ QString RewriteStyleModel::socialMediaType() const {
     return social_media_type_;
 }
 
+void RewriteStyleModel::setSocialMediaType(const QString &type)
+{
+    if (social_media_type_ == type) return;
+
+    LOG_TRACE_N << "Setting social media type to: " << type.toStdString();
+    social_media_type_ = type;
+    emit selectedChanged();
+}
+
 QString RewriteStyleModel::settingsKey() const {
     return settings_key_;
 }
@@ -336,9 +413,9 @@ QString RewriteStyleModel::settingsKey() const {
 
 QString RewriteStyleModel::makePrompt(std::string_view language) const
 {
-    string language_opt = "Do not translate. Detect and keep the original language.";
+    string language_opt = "Detect and preserve the original language.";
     if (!language.empty()) {
-        language_opt = format("Do not translate. The language of this document is and must remain \"{}\"\n", language);
+        language_opt = format("The language of the transcript is and must remain \"{}\"", language);
     }
 
     const auto& it = items_[static_cast<size_t>(clampedSelected_())];
@@ -346,7 +423,7 @@ QString RewriteStyleModel::makePrompt(std::string_view language) const
 
     const auto tmpl = prompts[static_cast<size_t>(it.prompt_index)];
     const QString qtmpl = QString::fromUtf8(tmpl.data(), int(tmpl.size()));
-    return qtmpl.arg(extra(), language_opt);
+    return qtmpl.arg(extra(), language_opt, language);
 }
 
 int RewriteStyleModel::clampedSelected_() const noexcept
