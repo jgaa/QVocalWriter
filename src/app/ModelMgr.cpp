@@ -650,7 +650,7 @@ QCoro::Task<ModelMgr::model_ctx_t> ModelMgr::getInstance(ModelKind kind, const Q
 QCoro::Task<bool> ModelInstance::load() noexcept
 {
     if (++loaded_count_ == 1) {
-        auto ok = co_await  QtConcurrent::run([this]() -> bool {
+        auto ok = co_await QtConcurrent::run([this]() -> bool {
             LOG_DEBUG_N << "Loading model instance: " << modelId();
             const ScopedTimer timer;
             try {

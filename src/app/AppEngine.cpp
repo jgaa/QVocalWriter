@@ -20,6 +20,7 @@
 #include "GeneralModel.h"
 #include "ChatConversation.h"
 #include "ScopedTimer.h"
+#include "AudioImport.h"
 
 #include "logging.h"
 
@@ -146,6 +147,14 @@ std::ostream& operator << (std::ostream& os, AppEngine::Mode mode) {
     return os << modes.at(static_cast<size_t>(mode));
 }
 
+std::ostream& operator << (std::ostream& os, AppEngine::TranscribeSource source) {
+    constexpr auto sources = to_array<string_view>({
+        "Mic",
+        "File"
+    });
+    return os << sources.at(static_cast<size_t>(source));
+}
+
 void AppEngine::startRecording()
 {
     LOG_INFO << "Starting recording";
@@ -189,14 +198,20 @@ void AppEngine::stopRecording()
     onRecordingDone();
 }
 
-void AppEngine::prepareForRecording()
+void AppEngine::prepareForTranscribe()
 {
     if (!canPrepareForTranscribe()) {
         failed("Cannot prepare in this state.");
         return;
     }
 
-    startPrepareForRecording();
+    if (transcribe_source_ == TranscribeSource::Mic) {
+        startPrepareForRecording();
+    }
+
+    if (transcribe_source_ == TranscribeSource::File) {
+        startPrepareForTranscribeFile();
+    }
 }
 
 void AppEngine::prepareForChat()
@@ -522,6 +537,20 @@ Developed by **Jarle Aase**, [The Last Viking LTD](https://lastviking.eu/)
 
 }
 
+void AppEngine::setInputAudioFile(const QUrl &path)
+{
+    auto file_path = path.toLocalFile();
+
+    LOG_DEBUG_N << "Setting input audio file to: " << file_path;
+    transcribe_from_file_path_ = file_path;
+    emit stateFlagsChanged();
+}
+
+void AppEngine::transcribeFile()
+{
+    startTransribeFile(transcribe_from_file_path_);
+}
+
 AppEngine::AppEngine() {
     QSettings settings{};
 
@@ -664,9 +693,24 @@ QStringList AppEngine::translateModels() const
 
 bool AppEngine::canPrepareForTranscribe() const
 {
-    const bool have_selecion = live_transcribe_models_.hasSelection()
+    const bool have_selection = live_transcribe_models_.hasSelection()
                                || post_transcribe_models_.hasSelection();
-    return state() == State::Idle && have_selecion;
+
+    if (transcribe_source_ == TranscribeSource::File) {
+        if (transcribe_from_file_path_.isEmpty()) {
+            LOG_TRACE_N << "No input file selected";
+            return false;
+        }
+    }
+
+    if (transcribe_source_ == TranscribeSource::Mic) {
+        if (currentMic() < 0) {
+            LOG_TRACE_N << "No microphone selected";
+            return false;
+        }
+    }
+
+    return state() == State::Idle && have_selection;
 }
 
 bool AppEngine::canPrepareForChat() const
@@ -755,6 +799,15 @@ QString AppEngine::chatModelName() const
     return chat_models_.selectedModelName();
 }
 
+void AppEngine::setTranscribeSource(TranscribeSource source)
+{
+    if (transcribe_source_ != source) {
+        LOG_DEBUG_N << "Transcribe source changed from " << transcribe_source_ << " to " << source;
+        transcribe_source_ = source;
+        emit stateFlagsChanged();
+    }
+}
+
 string AppEngine::getChatSystemPrompt() const
 {
     constexpr string_view default_prompt = R"(You are a helpful assistant.
@@ -826,14 +879,7 @@ QCoro::Task<void> AppEngine::startPrepareForRecording()
         file_writer_ = make_shared<AudioFileWriter>(recorder_->ringBuffer(), chunk_queue_.get(), pcm_file_path_);
     }
 
-    transcribe_conversation_ = make_shared<ChatConversation>("transcribe");
-    transcribe_conversation_->setModel(&transcribe_messages_model_);
-
-    const auto ok = co_await prepareTranscriberModels();
-    if (!ok) {
-        failed(tr("Failed to prepare for recording"));
-        co_return;
-    }
+    co_await prepareTranscriptFinal();
 
     co_return;
 }
@@ -901,7 +947,9 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
     const bool have_translate_step = doc_translate_models_.hasSelection() && doc_translate_languages_model_.haveSelection();
 
     const auto whisper_models = ModelMgr::instance().availableModels(ModelKind::WHISPER, ModelInfo::Capability::Transcribe);
-    if (live_transcribe_models_.hasSelection()) {
+    const auto is_recording = transcribe_source_ == TranscribeSource::Mic;
+
+    if (is_recording && live_transcribe_models_.hasSelection()) {
         const auto qid = QString::fromUtf8(live_transcribe_models_.currentId());
 
         if (rec_transcriber_ && rec_transcriber_->modelInfo().id == qid) {
@@ -1039,6 +1087,98 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
     co_return true;
 }
 
+QCoro::Task<void> AppEngine::startPrepareForTranscribeFile()
+{
+    LOG_INFO_N << "Preparing for file transcription";
+    setState(State::Preparing, tr("Preparing for file transcription..."));
+
+    if (file_writer_) {
+        file_writer_.reset();
+    }
+
+    if (recorder_) {
+        recorder_.reset();
+    }
+
+    if (chunk_queue_) {
+        chunk_queue_.reset();
+    }
+
+    // make sure pcm_file_path_ exists and is empty.
+    {
+        QFile f(pcm_file_path_);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            f.close();
+        }
+    }
+
+    co_await prepareTranscriptFinal();
+}
+
+QCoro::Task<void> AppEngine::prepareTranscriptFinal()
+{
+    transcribe_conversation_ = make_shared<ChatConversation>("transcribe");
+    transcribe_conversation_->setModel(&transcribe_messages_model_);
+
+    const auto ok = co_await prepareTranscriberModels();
+    if (!ok) {
+        failed(tr("Failed to prepare for transcript"));
+        co_return;
+    }
+
+    co_return;
+}
+
+QCoro::Task<void> AppEngine::startTransribeFile(const QString &path)
+{
+    {
+        // Check if the file exists
+        QFileInfo fi(path);
+        if (!fi.exists() || !fi.isFile()) {
+            failed(tr("Input audio file does not exist: %1").arg(path));
+            co_return;
+        }
+    }
+
+    setState(State::Processing, tr("Decoding audio file..."));
+
+    AudioImport import;
+
+    if (!co_await import.decodeMediaFile(path)) {
+        failed(tr("Failed to decode audio file"));
+        LOG_ERROR_N << "Failed to decode audio file: " << path.toStdString()
+                    << ": " << import.errorMessage();
+        co_return;
+    }
+
+    // TODO: Pass the imported format to the transcribers directly instead of
+    //       converting to the PCM format used by live recording.
+    const auto in = import.mono16kData();
+
+    std::vector<int16_t> out;
+    out.reserve(in.size());
+
+    for (float s : in) {
+        // clamp to [-1, 1]
+        if (s > 1.0f) s = 1.0f;
+        if (s < -1.0f) s = -1.0f;
+
+        // scale (use 32767 for symmetric range)
+        const int v = int(std::lrint(s * 32767.0f));
+        out.push_back(int16_t(std::clamp(v, -32768, 32767)));
+    }
+
+    QFile f(pcm_file_path_);
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        f.write(reinterpret_cast<const char*>(out.data()),
+                qint64(out.size() * sizeof(int16_t)));
+        f.close();
+    }
+
+    setStateText(tr("Transcribing audio file..."));
+    co_await onRecordingDone();
+}
+
 QCoro::Task<std::shared_ptr<GeneralModel> > AppEngine::prepareGeneralModel(
     std::string name, ModelInfo modelInfo, bool loadModel)
 {
@@ -1092,7 +1232,6 @@ QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareTranscriber(
 
     // Unconnected partial text signal
 
-
     // Relay partial text signals
     connect(
         transcriber.get(),
@@ -1113,18 +1252,6 @@ QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareTranscriber(
             failed(msg);
         }
     );
-
-    // if (submitFilalText) {
-    //     // Relay final text signal
-    //     LOG_TRACE_N << "Connecting finalTextAvailable signal for transcriber: " << name;
-    //     connect(transcriber.get(),
-    //             &Model::finalTextAvailable,
-    //             [this](const QString &text) {
-    //                 LOG_TRACE_N << "Final text available: " << text;
-    //                 onFinalRecordingTextAvailable(text);
-    //             });
-    // }
-
 
     co_await transcriber->init(model_id);
 

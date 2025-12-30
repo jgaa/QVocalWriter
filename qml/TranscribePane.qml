@@ -16,28 +16,49 @@ Item {
         anchors.fill: parent
         spacing: 12
 
-        // Microphone selection
+        // Source selection
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
 
             Label {
-                text: qsTr("Microphone")
-                Layout.alignment: Qt.AlignVCenter
+                text: qsTr("Input Source")
+            }
+
+            ComboBox  {
+                id: inputSource
+                enabled: root.canChangeSettings
+                model: [
+                    qsTr("Microphone")
+                    , qsTr("File")
+                ]
             }
 
             ComboBox {
-                id: languageCombo
+                id: micSelection
                 Layout.fillWidth: true
                 model: appEngine.michrophones
                 currentIndex: appEngine.currentMic
+                visible: inputSource.currentIndex == AppEngine.Mic
+                enabled: root.canChangeSettings
 
                 onCurrentIndexChanged: {
                     if (currentIndex !== appEngine.currentMic)
                         appEngine.currentMic = currentIndex
                 }
+            }
 
+            Button {
+                id: fileSelectButton
+                property string selectedFile: ""
+                Layout.fillWidth: true
+                text: qsTr("Select Audio File...")
+                visible: inputSource.currentIndex === AppEngine.File
                 enabled: root.canChangeSettings
+
+                onClicked: {
+                    srcFileDialog.open()
+                }
             }
         }
 
@@ -71,6 +92,7 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
+            visible: inputSource.currentIndex == AppEngine.Mic
 
             Label {
                 text: qsTr("Live transcribe Model")
@@ -205,7 +227,7 @@ Item {
             Layout.fillWidth: true
             text: qsTr("Prepare")
             enabled: appEngine.canPrepareForTranscribe
-            onClicked: appEngine.prepareForRecording()
+            onClicked: appEngine.prepareForTranscribe()
         }
 
         RowLayout {
@@ -277,10 +299,17 @@ Item {
             }
 
             onClicked: {
-                if (appEngine.canStop) {
-                    appEngine.stopRecording()
-                } else if (appEngine.canStart) {
-                    appEngine.startRecording()
+                switch (inputSource.currentIndex) {
+                    case AppEngine.Mic:
+                        if (appEngine.canStop) {
+                            appEngine.stopRecording()
+                        } else if (appEngine.canStart) {
+                            appEngine.startRecording()
+                        }
+                    break;
+                    case AppEngine.File:
+                        appEngine.transcribeFile()
+                        break;
                 }
             }
         }
@@ -341,6 +370,19 @@ Item {
 
             // Call into C++ to save
             appEngine.saveTranscriptToFile(selectedFile)
+        }
+    }
+
+    FileDialog {
+        id: srcFileDialog
+        title: qsTr("Select Audio File")
+        fileMode: FileDialog.ExistingFile
+        nameFilters: ["Audio Files (*.wav *.mp3 *.flac *.m4a)", "All Files (*)"]
+
+        onAccepted: {
+            console.log("Selected audio file:", selectedFile)
+            fileSelectButton.selectedFile = selectedFile
+            appEngine.setInputAudioFile(selectedFile)
         }
     }
 }

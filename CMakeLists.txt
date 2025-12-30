@@ -148,6 +148,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 find_package(Qt6 REQUIRED COMPONENTS Core Quick)
+find_package(Qt6 REQUIRED COMPONENTS Core)
 
 qt_standard_project_setup(REQUIRES 6.4)
 
@@ -161,6 +162,7 @@ target_link_libraries(QVocalWriter PRIVATE Qt6::Core)
 target_link_libraries(QVocalWriter PRIVATE Qt6::Core)
 target_link_libraries(QVocalWriter PRIVATE Qt6::Core)
 target_link_libraries(QVocalWriter PRIVATE Qt6::Core Qt6::Quick)
+target_link_libraries(QVocalWriter PRIVATE Qt6::Core)
 set(QML_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -223,6 +225,7 @@ qt_add_qml_module(${PROJECT_NAME}
           src/app/TranscriberWhisper.cpp
           src/app/TranscriberWhisper.h
           QML_FILES qml/MessagesView.qml
+          SOURCES src/app/AudioImport.h src/app/AudioImport.cpp
 )
 
 # Add includepaths

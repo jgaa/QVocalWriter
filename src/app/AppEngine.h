@@ -57,6 +57,7 @@ class AppEngine : public QObject
     Q_PROPERTY(ChatMessagesModel* chatMessages READ chatMessages CONSTANT)
     Q_PROPERTY(ChatMessagesModel* transcribeMessages READ transcribeMessages CONSTANT)
     Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged)
+    Q_PROPERTY(TranscribeSource transcribeSource READ transcribeSource WRITE setTranscribeSource NOTIFY stateFlagsChanged)
 
 public:
     enum class State {
@@ -90,6 +91,12 @@ public:
     };
     Q_ENUM(Mode)
 
+    enum class TranscribeSource {
+        Mic,
+        File
+    };
+    Q_ENUM(TranscribeSource)
+
     // Keep separate states for each mode (UI pane)
     using states_t = std::array<State, static_cast<size_t>(Mode::Count)>;
     using state_text_t = std::array<QString, static_cast<size_t>(Mode::Count)>;
@@ -97,7 +104,7 @@ public:
     Q_INVOKABLE void setLanguageIndex(int index);
     Q_INVOKABLE void startRecording();
     Q_INVOKABLE void stopRecording();
-    Q_INVOKABLE void prepareForRecording();
+    Q_INVOKABLE void prepareForTranscribe();
     Q_INVOKABLE void prepareForChat();
     Q_INVOKABLE void prepareForTranslation();
     Q_INVOKABLE void resetTranslationState();
@@ -109,6 +116,8 @@ public:
     Q_INVOKABLE bool swapTranslationLanguages();
     Q_INVOKABLE static void copyTextToClipboard(const QString& text);
     Q_INVOKABLE QString aboutText() const;
+    Q_INVOKABLE void setInputAudioFile(const QUrl& path);
+    Q_INVOKABLE void transcribeFile();
 
     AppEngine();
 
@@ -157,6 +166,8 @@ public:
     QString transcribePostModelName() const { return transcribe_post_model_name_;}
     QString chatModelName() const;
     std::string getChatSystemPrompt() const;
+    TranscribeSource transcribeSource() const { return transcribe_source_; }
+    void setTranscribeSource(TranscribeSource source);
 
 
     bool canPrepareForTranscribe() const;
@@ -213,6 +224,9 @@ private:
     QCoro::Task<void> startPrepareForChat(QString modelName);
     QCoro::Task<void> startPrepareForTranslation();
     QCoro::Task<bool> prepareTranscriberModels();
+    QCoro::Task<void> startPrepareForTranscribeFile();
+    QCoro::Task<void> prepareTranscriptFinal();
+    QCoro::Task<void> startTransribeFile(const QString& path);
     QCoro::Task<std::shared_ptr<Transcriber>> prepareTranscriber(std::string name,
                                                            ModelInfo modelInfo,
                                                            std::string_view language,
@@ -276,7 +290,11 @@ private:
     QString current_recorded_text_;
     QList<Language> languageList_;
     Mode mode_{Mode::Transcribe};
+    TranscribeSource transcribe_source_{TranscribeSource::Mic};
+    QString transcribe_from_file_path_;
 };
 
 std::ostream& operator << (std::ostream& os, AppEngine::State state);
 std::ostream& operator << (std::ostream& os, AppEngine::Mode mode);
+std::ostream& operator << (std::ostream& os, AppEngine::TranscribeSource source);
+
