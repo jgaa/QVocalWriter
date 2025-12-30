@@ -35,7 +35,9 @@ class RewriteStyleModel final : public QAbstractListModel
 
     Q_PROPERTY(int selected READ selected WRITE setSelected NOTIFY selectedChanged)
     Q_PROPERTY(QString socialMedia READ socialMediaType WRITE setSocialMediaType NOTIFY selectedChanged)
+    Q_PROPERTY(QString creativeWritingTarget READ creativeWritingTarget WRITE setCreativeWritingTarget NOTIFY selectedChanged)
     Q_PROPERTY(bool isSocialMedia READ isSocialMedia NOTIFY selectedChanged)
+    Q_PROPERTY(bool isCreativeWriting READ isCreativeWriting NOTIFY selectedChanged)
 
 public:
     enum class Roles : int {
@@ -80,6 +82,10 @@ public:
         return selectedKind() == Kind::SocialMedia;
     }
 
+    bool isCreativeWriting() const {
+        return selectedKind() == Kind::Creative;
+    }
+
     QString extra() const;
 
     Q_INVOKABLE void setSelected(int index);
@@ -91,6 +97,10 @@ public:
     QString socialMediaType() const;
 
     void setSocialMediaType(const QString& type);
+
+    QString creativeWritingTarget() const;
+
+    void setCreativeWritingTarget(const QString& target);
 
     // ---- Settings ----
     QString settingsKey() const;
@@ -129,4 +139,5 @@ private:
     std::vector<Item> items_;
     QString settings_key_{};
     QString social_media_type_;
+    QString creative_writing_target_;
 };

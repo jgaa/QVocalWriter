@@ -186,14 +186,10 @@ Hard rules:
 - Keep names/places consistent with what’s said; if unclear, choose neutral placeholders.
 
 Output requirements:
-- Provide 3 options:
-  A) Short story (800–1400 words)
-  B) Poem (free verse, 20–40 lines)
-  C) Script scene (1–3 pages, dialogue + stage directions)
-- Each option should share the same core theme.
+- If appropriate, provide more than one option/alternative.
 - No commentary, no explanation.
 
-Extra constraints (if any): %1
+Style: %1
 )",
 
     // 7) Conservative clean-up (medical/legal memos)
@@ -305,9 +301,9 @@ RewriteStyleModel::RewriteStyleModel(const QString &settingsKey, QObject *parent
     items_.emplace_back(Kind::TechnicalDoc, tr("Technical documentation"), 3);
     items_.emplace_back(Kind::MeetingNotes, tr("Meeting notes"), 4);
     items_.emplace_back(Kind::Plan, tr("Structured plan from rambling"), 5);
-    items_.emplace_back(Kind::Creative, tr("Creative writing (story / poem / script)"), 6);
-    items_.emplace_back(Kind::Conservative, tr("Conservative cleanup (medical/legal memo)"), 7);
-    items_.emplace_back(Kind::Rant, tr("Rant cleanup (keep tone)"), 8);
+    items_.emplace_back(Kind::Creative, tr("Creative writing"), 6);
+    items_.emplace_back(Kind::Conservative, tr("Conservative cleanup"), 7);
+    items_.emplace_back(Kind::Rant, tr("Rant cleanup"), 8);
     items_.emplace_back(Kind::Clean, tr("Clean transcript (no rewriting)"), 9);
 
     // Sort by name, but none is always first
@@ -361,6 +357,8 @@ QString RewriteStyleModel::extra() const {
     switch (selectedKind()) {
     case Kind::SocialMedia:
         return socialMediaType();
+    case Kind::Creative:
+        return creativeWritingTarget();
     default:
         break;
     }
@@ -403,6 +401,20 @@ void RewriteStyleModel::setSocialMediaType(const QString &type)
 
     LOG_TRACE_N << "Setting social media type to: " << type.toStdString();
     social_media_type_ = type;
+    emit selectedChanged();
+}
+
+QString RewriteStyleModel::creativeWritingTarget() const
+{
+    return creative_writing_target_;
+}
+
+void RewriteStyleModel::setCreativeWritingTarget(const QString &target)
+{
+    if (creative_writing_target_ == target) return;
+
+    LOG_TRACE_N << "Setting creative writing target to: " << target.toStdString();
+    creative_writing_target_ = target;
     emit selectedChanged();
 }
 

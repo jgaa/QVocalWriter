@@ -145,7 +145,7 @@ Item {
             visible: docPrepareModelPicker.model.hasSelection
 
             Label {
-                text: qsTr("Rewrite style")
+                text: qsTr("Output style")
                 Layout.alignment: Qt.AlignVCenter
             }
 
@@ -163,6 +163,8 @@ Item {
             ComboBox {
                 id: socialMediaType
                 editable: true
+                visible: rewriteStyleCombo.model.isSocialMedia
+                enabled: root.canChangeSettings
                 model: [
                     "X/Twitter", "Linkedin", "Reddit", "Facebook",
                     "Instagram", "TikTok", qsTr("Work/intranet"), qsTr("Generic")
@@ -170,6 +172,45 @@ Item {
 
                 function syncToCpp() {
                     rewriteStyleCombo.model.socialMedia = editable ? editText : currentText
+                }
+
+                // When user types (this is the important one)
+                onEditTextChanged: syncToCpp()
+
+                // When user selects an item
+                onActivated: syncToCpp()      // or onCurrentIndexChanged if you prefer
+
+                // When user presses Enter in the editor
+                onAccepted: syncToCpp()
+            }
+
+            ComboBox {
+                id: creativeWritingTarget
+                editable: true
+                visible: rewriteStyleCombo.model.isCreativeWriting
+                enabled: root.canChangeSettings
+                model: [
+                    qsTr("Dialogue Scene"),
+                    qsTr("Essay"),
+                    qsTr("Fantasy"),
+                    qsTr("Flash Fiction"),
+                    qsTr("General"),
+                    qsTr("Horror"),
+                    qsTr("Journal Entry"),
+                    qsTr("Memoir"),
+                    qsTr("Mystery"),
+                    qsTr("Novel Chapter"),
+                    qsTr("Personal Essay"),
+                    qsTr("Poem"),
+                    qsTr("Romance"),
+                    qsTr("Science Fiction"),
+                    qsTr("Screenplay Scene"),
+                    qsTr("Short Story"),
+                    qsTr("Stage Play Scene"),
+                ]
+
+                function syncToCpp() {
+                    rewriteStyleCombo.model.creativeWritingTarget = editable ? editText : currentText
                 }
 
                 // When user types (this is the important one)
