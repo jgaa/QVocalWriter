@@ -30,11 +30,11 @@ static void llamaLogger(ggml_log_level level, const char * text, void *) {
     }
 
     switch (level) {
-    case GGML_LOG_LEVEL_ERROR: LOG_ERROR << "[llama] " << msg; break;
+    case GGML_LOG_LEVEL_ERROR: LOG_ERROR_N << "[llama] " << msg; break;
     case GGML_LOG_LEVEL_WARN:  LOG_WARN  << "[llama] " << msg; break;
     case GGML_LOG_LEVEL_INFO:  LOG_INFO  << "[llama] " << msg; break;
-    case GGML_LOG_LEVEL_DEBUG: LOG_DEBUG << "[llama] " << msg; break;
-    case GGML_LOG_LEVEL_CONT:  LOG_TRACE << "[llama] " << msg; break;
+    case GGML_LOG_LEVEL_DEBUG: LOG_DEBUG_N << "[llama] " << msg; break;
+    case GGML_LOG_LEVEL_CONT:  LOG_TRACE_N << "[llama] " << msg; break;
     case GGML_LOG_LEVEL_NONE:  break;
     }
 }
@@ -142,6 +142,7 @@ private:
     bool appendAndCallback(string_view piece);
     bool evalTokens(span<const llama_token> toks);
 
+    int ctx_size_override_{0}; // 0 => use model_ctx_->ctxSize()
     shared_ptr<LlamaCtxImpl> model_ctx_;
 
     llama_context * ctx_{nullptr};
@@ -266,7 +267,7 @@ public:
     {
         clearError();
 
-        LOG_DEBUG << "Loading Llama model " << modelId << " from " << modelPath;
+        LOG_DEBUG_N << "Loading Llama model " << modelId << " from " << modelPath;
 
         auto mparams = llama_model_default_params();
         // Keep wrapper CPU-only by default; if you later enable GPU variants, map params here.
@@ -275,7 +276,7 @@ public:
         llama_model * model = llama_model_load_from_file(modelPath.c_str(), mparams);
         if (!model) {
             setError(format("Failed to load llama model from {}", modelPath.string()));
-            LOG_ERROR << lastError();
+            LOG_ERROR_N << lastError();
             return {};
         }
 
@@ -351,7 +352,7 @@ bool LlamaSessionCtxImpl::appendAndCallback(string_view piece) {
     final_text_.append(piece);
     if (on_partial_text_callback_) {
         if (shouldFlushNow(piece, final_text_)) {
-            LOG_TRACE << "Flushing partial text callback, final_text_=\"" << final_text_ << "\"";
+            LOG_TRACE_N << "Flushing partial text callback, final_text_=\"" << final_text_ << "\"";
             on_partial_text_callback_(final_text_);
         }
     }
@@ -361,59 +362,74 @@ bool LlamaSessionCtxImpl::appendAndCallback(string_view piece) {
 bool LlamaSessionCtxImpl::evalTokens(span<const llama_token> toks) {
     if (toks.empty()) return true;
 
-    llama_batch batch = llama_batch_init((int32_t)toks.size(), /*embd*/ 0, /*n_seq_max*/ 1);
-    batch.n_tokens = (int32_t)toks.size();
-
-    for (int32_t i = 0; i < batch.n_tokens; ++i) {
-        batch.token[i]     = toks[(size_t)i];
-        batch.pos[i]       = n_past_ + i;
-
-        batch.n_seq_id[i]  = 1;
-        batch.seq_id[i][0] = 0;
-
-        batch.logits[i]    = (i == batch.n_tokens - 1) ? 1 : 0;
-    }
-
-    // We requested logits for the last token in this batch:
-    last_logits_idx_ = batch.n_tokens - 1;
-
-    const int rc = llama_decode(ctx_, batch);
-    llama_batch_free(batch);
-
-    if (rc != 0) {
-        LOG_ERROR << "llama_decode failed rc=" << rc;
+    const int32_t n_batch = llama_n_batch(ctx_);
+    if (n_batch <= 0) {
+        LOG_ERROR_N << "llama_n_batch(ctx_) returned " << n_batch;
         return false;
     }
 
-    n_past_ += (int32_t)toks.size();
+    int32_t offset = 0;
+    while (offset < (int32_t)toks.size()) {
+        const int32_t n_this = std::min<int32_t>(n_batch, (int32_t)toks.size() - offset);
+
+        llama_batch batch = llama_batch_init(n_this, /*embd*/ 0, /*n_seq_max*/ 1);
+        batch.n_tokens = n_this;
+
+        for (int32_t i = 0; i < n_this; ++i) {
+            batch.token[i]     = toks[(size_t)offset + (size_t)i];
+            batch.pos[i]       = n_past_ + i;
+
+            batch.n_seq_id[i]  = 1;
+            batch.seq_id[i][0] = 0;
+
+            batch.logits[i]    = (i == n_this - 1) ? 1 : 0;
+        }
+
+        last_logits_idx_ = n_this - 1;
+
+        const int rc = llama_decode(ctx_, batch);
+        llama_batch_free(batch);
+
+        if (rc != 0) {
+            LOG_ERROR_N << "llama_decode failed rc=" << rc;
+            return false;
+        }
+
+        n_past_ += n_this;
+        offset += n_this;
+    }
+
     return true;
 }
 
-
 bool LlamaSessionCtxImpl::promptImpl(string_view text, const Params & params) {
     final_text_.clear();
+    partial_text_.clear();
+
+    // NOTE:
+    // - Auto-resize + retry is safe only for "fresh start" prompts.
+    // - If continue_conversation=true, we must not reset context / retry,
+    //   otherwise we'd duplicate history and break state.
+    const bool can_retry = !params.continue_conversation;
 
     if (!params.continue_conversation) {
-        // Fresh start: we must reset BOTH n_past_ and KV cache.
-        // Your llama.h doesn't expose kv_cache_clear, so recreate the context.
+        // Always start from a clean context for this prompt.
         if (!resetContext()) {
             LOG_ERROR_N << "Failed to reset context for new conversation";
             return false;
         }
         LOG_DEBUG_N << "Starting new conversation.";
     } else {
-        // Continue: keep ctx_ + KV cache and DO NOT reset n_past_.
-        // The caller must provide only the "delta" (new user message + assistant header),
-        // not the whole conversation.
         LOG_DEBUG_N << "Continuing conversation, n_past=" << n_past_;
     }
 
-    LOG_DEBUG << "Prompting Llama model with text: " << text;
+    LOG_DEBUG_N << "Prompting Llama model with text bytes=" << text.size();
 
-    // ---- tokenize prompt (vocab-based API) ----
-    vector<llama_token> prompt_tokens(text.size() + 8);
+    // -------------------------
+    // 1) Tokenize prompt once (vocab-based API)
+    // -------------------------
+    std::vector<llama_token> prompt_tokens(text.size() + 8);
 
-    LOG_DEBUG << "Tokenizing prompt text of size " << text.size();
     int32_t n_prompt = llama_tokenize(
         vocab_,
         text.data(),
@@ -424,68 +440,196 @@ bool LlamaSessionCtxImpl::promptImpl(string_view text, const Params & params) {
         /*parse_special*/ true
         );
 
+    // In newer llama.cpp, a negative return often means "buffer too small" and -n is required
     if (n_prompt < 0) {
-        LOG_ERROR << "llama_tokenize failed";
+        const int32_t need = -n_prompt;
+        prompt_tokens.resize((size_t)need);
+
+        n_prompt = llama_tokenize(
+            vocab_,
+            text.data(),
+            (int32_t)text.size(),
+            prompt_tokens.data(),
+            (int32_t)prompt_tokens.size(),
+            /*add_special*/ false,
+            /*parse_special*/ true
+            );
+    }
+
+    if (n_prompt < 0) {
+        LOG_ERROR_N << "llama_tokenize failed (n_prompt=" << n_prompt << ")";
         return false;
     }
+
     prompt_tokens.resize((size_t)n_prompt);
+    LOG_DEBUG_N << "Tokenized prompt into " << n_prompt << " tokens";
 
-    LOG_DEBUG << "Tokenized prompt into " << n_prompt << " tokens";
-    if (!evalTokens(prompt_tokens)) {
-        return false;
-    }
+    // -------------------------
+    // 2) Retry loop: scale output + ctx if result looks partial
+    // -------------------------
+    auto roundUp = [](int v, int multiple) -> int {
+        if (multiple <= 0) return v;
+        return ((v + multiple - 1) / multiple) * multiple;
+    };
 
-    LOG_DEBUG << "Evaluated prompt tokens, n_past=" << n_past_;
-    // ---- sampler chain (current API) ----
-    auto sparams = llama_sampler_chain_default_params();
-    llama_sampler * smpl = llama_sampler_chain_init(sparams);
+    // Default output budget = params.max_tokens.
+    // For cleanup/formatting, 256 is *far* too small; if user kept default, scaling will kick in.
+    int target_out = params.max_tokens > 0 ? params.max_tokens : 256;
 
-    // Put penalties early (so they affect candidates before truncation)
-    llama_sampler_chain_add(smpl, llama_sampler_init_penalties(
-                                      /*penalty_last_n*/ -1,
-                                      /*penalty_repeat*/ params.repeat_penalty,
-                                      /*penalty_freq*/   0.0f,
-                                      /*penalty_present*/0.0f
-                                      ));
+    // Safety margins
+    const int ctx_margin        = 128;    // extra room beyond prompt+out
+    const int room_margin       = 16;     // keep a little headroom in generation
+    const int max_attempts      = can_retry ? 6 : 1;
 
-    llama_sampler_chain_add(smpl, llama_sampler_init_top_k(params.top_k));
-    llama_sampler_chain_add(smpl, llama_sampler_init_top_p(params.top_p, /*min_keep*/ 1));
-    llama_sampler_chain_add(smpl, llama_sampler_init_temp(params.temperature));
+    // Hard caps (tune as you like)
+    const int hard_max_out      = 16384;  // maximum output tokens we'll try for auto-scaling
+    const int hard_max_ctx      = 131072; // maximum context we'll request (prevents runaway)
 
-    // *** REQUIRED: terminal sampler that chooses the token ***
-    llama_sampler_chain_add(smpl, llama_sampler_init_dist(/*seed*/ 1234));
-    // (or for debugging: llama_sampler_init_greedy())
+    std::string last_stop_reason = "unknown";
 
-    llama_sampler_reset(smpl);
+    for (int attempt = 0; attempt < max_attempts; ++attempt) {
 
-    const llama_vocab * vocab = llama_model_get_vocab(model_);
+        // If we can retry, we always run from a clean context each attempt
+        if (can_retry) {
+            // Compute required n_ctx for (prompt + target_out + margin)
+            int want_ctx = (int)prompt_tokens.size() + target_out + ctx_margin;
+            want_ctx = std::min(want_ctx, hard_max_ctx);
+            want_ctx = roundUp(want_ctx, 256);
 
-    // generation loop
-    LOG_DEBUG << "Starting generation loop for up to " << params.max_tokens << " tokens";
-    for (int i = 0; i < params.max_tokens; ++i) {
-        // b7444 supports idx = -1 meaning "last logits in batch"
-        llama_token id = llama_sampler_sample(smpl, ctx_, -1);
-
-        // IMPORTANT for penalties/repetition tracking:
-        llama_sampler_accept(smpl, id);
-
-        if (llama_vocab_is_eog(vocab, id)) {
-            break;
+            // Apply override and recreate context
+            ctx_size_override_ = std::max(want_ctx, model_ctx_->ctxSize());
+            if (!resetContext()) {
+                LOG_ERROR_N << "Failed to recreate context for attempt=" << attempt
+                          << " n_ctx=" << ctx_size_override_;
+                return false;
+            }
         }
 
-        const auto piece = tokenToPiece(vocab, id);
-        LOG_TRACE << "Sampled token id=" << id << " piece=\"" << piece << "\"";
-        appendAndCallback(piece);
+        // Prefill prompt tokens
+        if (!evalTokens(prompt_tokens)) {
+            LOG_ERROR_N << "Failed to eval prompt tokens";
+            return false;
+        }
 
-        const llama_token toks[1] = { id };
-        if (!evalTokens(std::span{toks, 1})) break;
+        // Determine how many tokens we can actually generate in this ctx
+        const int n_ctx = llama_n_ctx(ctx_);
+        const int room  = std::max(0, n_ctx - n_past_ - 1);
+
+        // Use target_out, but never exceed room (minus margin)
+        int effective_max_tokens = target_out;
+        effective_max_tokens = std::min(effective_max_tokens, std::max(0, room - room_margin));
+
+        LOG_DEBUG_N << "Starting generation attempt=" << attempt
+                  << " for up to " << effective_max_tokens
+                  << " tokens (target_out=" << target_out
+                  << ", params.max_tokens=" << params.max_tokens
+                  << ", n_ctx=" << n_ctx
+                  << ", n_past=" << n_past_
+                  << ", room=" << room << ")";
+
+        // Fresh output buffers each attempt (important when retrying)
+        final_text_.clear();
+        partial_text_.clear();
+
+        // Build sampler chain (fresh per attempt!)
+        auto sparams = llama_sampler_chain_default_params();
+        llama_sampler * smpl = llama_sampler_chain_init(sparams);
+
+        llama_sampler_chain_add(smpl, llama_sampler_init_penalties(
+                                          /*penalty_last_n*/ -1,
+                                          /*penalty_repeat*/ params.repeat_penalty,
+                                          /*penalty_freq*/   0.0f,
+                                          /*penalty_present*/0.0f));
+
+        llama_sampler_chain_add(smpl, llama_sampler_init_top_k(params.top_k));
+        llama_sampler_chain_add(smpl, llama_sampler_init_top_p(params.top_p, /*min_keep*/ 1));
+        llama_sampler_chain_add(smpl, llama_sampler_init_temp(params.temperature));
+
+        // Terminal sampler that chooses token
+        llama_sampler_chain_add(smpl, llama_sampler_init_dist(/*seed*/ 1234));
+        // (or llama_sampler_init_greedy() for debugging)
+
+        llama_sampler_reset(smpl);
+
+        const llama_vocab * vocab = llama_model_get_vocab(model_);
+
+        bool saw_eog = false;
+        int generated = 0;
+        std::string stop_reason = "unknown";
+
+        // -------------------------
+        // Generation loop
+        // -------------------------
+        for (int i = 0; i < effective_max_tokens; ++i) {
+            llama_token id = llama_sampler_sample(smpl, ctx_, -1);
+            llama_sampler_accept(smpl, id);
+
+            if (llama_vocab_is_eog(vocab, id)) {
+                saw_eog = true;
+                stop_reason = "eog";
+                break;
+            }
+
+            const auto piece = tokenToPiece(vocab, id);
+            if (!appendAndCallback(piece)) {
+                stop_reason = "callback_failed";
+                break;
+            }
+            ++generated;
+
+            const llama_token toks[1] = { id };
+            if (!evalTokens(std::span{toks, 1})) {
+                stop_reason = "eval_failed";
+                break;
+            }
+        }
+
+        if (stop_reason == "unknown" && generated >= effective_max_tokens) {
+            // We hit the generation cap or ran out of room
+            stop_reason = "max_tokens";
+        }
+
+        llama_sampler_free(smpl);
+
+        last_stop_reason = stop_reason;
+
+        LOG_INFO << "LlamaEngine Generation stopped: " << stop_reason
+                 << " generated=" << generated
+                 << " effective_max_tokens=" << effective_max_tokens
+                 << " n_past=" << n_past_
+                 << " n_ctx=" << llama_n_ctx(ctx_);
+
+        // Success condition: model ended on its own
+        if (saw_eog) {
+            return true;
+        }
+
+        // Hard failures should not be retried
+        if (stop_reason == "eval_failed" || stop_reason == "callback_failed") {
+            return (stop_reason != "eval_failed"); // conservative: eval_failed => false
+        }
+
+        // If we cannot retry (continue_conversation) return best effort
+        if (!can_retry) {
+            return true;
+        }
+
+        // If we got here, we likely returned a partial result. Scale up and retry.
+        if (target_out >= hard_max_out) {
+            LOG_WARN_N << "Reached hard_max_out=" << hard_max_out
+                     << " without EOG. Returning best effort partial result.";
+            return true;
+        }
+
+        // Scale up (doubling works well; you can do 1.5x if you want)
+        target_out = std::min(hard_max_out, target_out * 2);
     }
 
-    LOG_DEBUG << "Generation loop complete, total n_past=" << n_past_;
-    llama_sampler_free(smpl);
-
+    // If we exhausted attempts, return best effort
+    LOG_WARN_N << "Exhausted retry attempts. Last stop reason: " << last_stop_reason;
     return true;
 }
+
 
 bool LlamaSessionCtxImpl::resetContext() {
     LOG_DEBUG_N << "Resetting llama_context for new session";
@@ -495,7 +639,12 @@ bool LlamaSessionCtxImpl::resetContext() {
     }
 
     auto cparams = llama_context_default_params();
-    cparams.n_ctx = model_ctx_->ctxSize();
+    const int desired_ctx = (ctx_size_override_ > 0) ? ctx_size_override_ : model_ctx_->ctxSize();
+    cparams.n_ctx = desired_ctx;
+
+    // Optional, but nice: pick a sane batch default for large ctx
+    // (you still won’t crash because evalTokens chunks)
+    cparams.n_batch = std::min(desired_ctx, 2048);
 
     if (model_ctx_->threads() > 0) {
         cparams.n_threads = model_ctx_->threads();
@@ -504,12 +653,13 @@ bool LlamaSessionCtxImpl::resetContext() {
 
     ctx_ = llama_init_from_model(model_, cparams);
     if (!ctx_) {
-        LOG_ERROR << "Failed to recreate llama_context";
+        LOG_ERROR_N << "Failed to recreate llama_context";
         return false;
     }
 
     n_past_ = 0;
     last_logits_idx_ = 0;
+
     return true;
 }
 
