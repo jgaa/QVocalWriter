@@ -251,6 +251,55 @@ std::string ModelInfo::formatPrompt(messages_view_t messages) const {
         break;
     }
 
+    case PromptStyle::DeepSeek: {
+        // DeepSeek chat template used by DeepSeek Coder V2 Instruct family.
+        //
+        // Documented pattern is roughly:
+        // <｜begin▁of▁sentence｜>{system_prompt}
+        //
+        // User: ...
+        //
+        // Assistant: ...
+        //
+        // ... then open assistant turn with:
+        // Assistant: <｜end▁of▁sentence｜>Assistant:
+        //
+        // NOTE: Tokens contain non-ASCII characters; keep source UTF-8.
+
+        static constexpr std::string_view BOS = "<｜begin▁of▁sentence｜>";
+        static constexpr std::string_view EOS = "<｜end▁of▁sentence｜>";
+
+        oss << BOS;
+
+        // System prompt: include only if first message is system
+        if (has_system_first(messages)) {
+            oss << messages.front()->content;
+            oss << "\n\n";
+        }
+
+        // Emit conversation
+        for (const auto & m : without_system(messages)) {
+            switch (m->role) {
+            case PromptRole::User:
+                oss << "User: " << m->content << "\n\n";
+                break;
+            case PromptRole::Assistant:
+                oss << "Assistant: " << m->content << "\n\n";
+                break;
+            case PromptRole::System:
+                // If system appears later (shouldn't), treat as plain text block
+                oss << m->content << "\n\n";
+                break;
+            }
+        }
+
+        if (open_assistant_turn) {
+            // Many DeepSeek instruct checkpoints expect this exact opener:
+            // "Assistant: <｜end▁of▁sentence｜>Assistant:"
+            oss << "Assistant: " << EOS << "Assistant:";
+        }
+        break;
+    }
 
     case PromptStyle::None:
         // handled above

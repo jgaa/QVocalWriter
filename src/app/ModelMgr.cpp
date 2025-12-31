@@ -212,7 +212,55 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         "",
         mi_t::Chat | mi_t::Rewrite,
         "https://huggingface.co/VibeStudio/Nidum-Gemma-2B-Uncensored-GGUF/resolve/main/Nidum-Limitless-Gemma-2B-F16.gguf?download=true"
-    }
+    },
+
+    // ---- Balanced / general chat & research ----
+    {
+        "Qwen3 8B Instruct (Q4_K_M)",
+        "qwen3-8b-instruct-q4_k_m",
+        ModelInfo::PromptStyle::ChatML,  // same as your Qwen2.5 entry
+        "Qwen3-8B-Q4_K_M.gguf",
+        mi_t::Q4_0,                      // bucket mapping; K-quants -> your Q4 bucket
+        5150,                            // ~5.03 GB
+        "b9059e3978453f50a8e9e45a825243abdb8739b2f4623e541fd5a392d9672c0f",
+        mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
+        "https://huggingface.co/lm-kit/qwen-3-8b-instruct-gguf/resolve/main/"
+    },
+    {
+        "Qwen3 8B Instruct (Q5_K_M)",
+        "qwen3-8b-instruct-q5_k_m",
+        ModelInfo::PromptStyle::ChatML,
+        "Qwen3-8B-Q5_K_M.gguf",
+        mi_t::Q5_0,
+        5990,                            // ~5.85 GB
+        "",                              // (optional) you can fetch SHA the same way if you want
+        mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
+        "https://huggingface.co/lm-kit/qwen-3-8b-instruct-gguf/resolve/main/"
+    },
+
+    {
+        "Yi 1.5 9B Chat (Q4_K_M)",
+        "yi-1.5-9b-chat-q4_k_m",
+        ModelInfo::PromptStyle::ChatML,   // Yi Chat uses <|im_start|>… style
+        "Yi-1.5-9B-Chat-Q4_K_M.gguf",
+        mi_t::Q4_0,
+        5460,                             // ~5.33 GB
+        "9bfda34f9343785f9cfb040dd63a215d0ca8781cb38d5b8825c12e6e1d8230f9",
+        mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
+        "https://huggingface.co/bartowski/Yi-1.5-9B-Chat-GGUF/resolve/main/"
+    },
+
+    {
+        "DeepSeek Coder V2 Lite Instruct (Q4_K_M)",
+        "deepseek-coder-v2-lite-instruct-q4_k_m",
+        ModelInfo::PromptStyle::Raw, // see new style suggestion below
+        "DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf",
+        mi_t::Q4_0,
+        10650,                        // ~10.4 GB
+        "603bd3f8a0281d16571da7c08bd661ee17ff0d1be6fcbd1b42242da257ef0bb8",
+        mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
+        "https://huggingface.co/bartowski/DeepSeek-Coder-V2-Lite-Instruct-GGUF/resolve/main/"
+    },
 });
 
 string_view dirPrefix(ModelKind kind) {

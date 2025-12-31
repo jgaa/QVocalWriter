@@ -474,7 +474,13 @@ bool LlamaSessionCtxImpl::promptImpl(string_view text, const Params & params) {
 
     // Default output budget = params.max_tokens.
     // For cleanup/formatting, 256 is *far* too small; if user kept default, scaling will kick in.
-    int target_out = params.max_tokens > 0 ? params.max_tokens : 256;
+
+    const int pt = (int)prompt_tokens.size();
+
+    // Estimate transcript tokens as "most of prompt"
+    const int est_transcript = std::max(0, pt - 256); // 256 ~ worst-case overhead for instructions/template
+    const int est_out = std::clamp(est_transcript + 256, params.max_tokens, 16384);
+    int target_out = std::max( params.max_tokens, est_out);
 
     // Safety margins
     const int ctx_margin        = 128;    // extra room beyond prompt+out

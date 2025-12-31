@@ -33,6 +33,7 @@ struct ModelInfo {
         ChatML,
         Mistral,
         Gemma,
+        DeepSeek,
         Raw
     };
 
