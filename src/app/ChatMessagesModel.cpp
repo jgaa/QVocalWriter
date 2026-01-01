@@ -212,7 +212,7 @@ QString ChatMessagesModel::formatMessageAsMarkdown(const ChatMessage &msg) const
     const QString content = QString::fromStdString(msg.content).trimmed();
 
     const QString timestamp =
-        QDateTime::fromSecsSinceEpoch(msg.timestamp).toString(Qt::ISODate);
+        QDateTime::fromSecsSinceEpoch(msg.timestamp()).toString(Qt::ISODate);
 
     const QString duration =
         QString::number(msg.duration_seconds, 'f', 2);
@@ -230,7 +230,7 @@ QJsonObject ChatMessagesModel::formatMessageAsJSON(const ChatMessage &msg) const
     QJsonObject o;
     o["role"] = actorName(msg);
     o["content"] = QString::fromStdString(msg.content);
-    o["timestamp"] = QDateTime::fromSecsSinceEpoch(msg.timestamp).toString(Qt::ISODate);
+    o["timestamp"] = QDateTime::fromSecsSinceEpoch(msg.timestamp()).toString(Qt::ISODate);
     if (msg.role == PromptRole::Assistant) {
         o["duration"] = msg.duration_seconds;
         o["model_used"] = QString::fromStdString(msg.model_used);

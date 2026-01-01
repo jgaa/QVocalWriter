@@ -111,6 +111,58 @@ TARGET LANGUAGE:
 )";
 
 
+#include <QFile>
+#include <QDataStream>
+#include <QtEndian>
+
+static bool writeWavFromRawPcm16(
+    const QString& pcmPath,
+    const QString& wavPath,
+    int sampleRate = 16000,
+    int channels = 1
+    ) {
+    QFile in(pcmPath);
+    if (!in.open(QIODevice::ReadOnly))
+        return false;
+
+    const QByteArray pcm = in.readAll();
+    in.close();
+
+    const quint16 bitsPerSample = 16;
+    const quint16 blockAlign = channels * (bitsPerSample / 8);
+    const quint32 byteRate = sampleRate * blockAlign;
+    const quint32 dataSize = static_cast<quint32>(pcm.size());
+
+    QFile out(wavPath);
+    if (!out.open(QIODevice::WriteOnly))
+        return false;
+
+    QDataStream s(&out);
+    s.setByteOrder(QDataStream::LittleEndian);
+
+    // RIFF header
+    out.write("RIFF", 4);
+    s << quint32(36 + dataSize);          // file size minus 8
+    out.write("WAVE", 4);
+
+    // fmt chunk
+    out.write("fmt ", 4);
+    s << quint32(16);                     // PCM fmt chunk size
+    s << quint16(1);                      // audio format 1 = PCM
+    s << quint16(channels);
+    s << quint32(sampleRate);
+    s << quint32(byteRate);
+    s << quint16(blockAlign);
+    s << quint16(bitsPerSample);
+
+    // data chunk
+    out.write("data", 4);
+    s << quint32(dataSize);
+    out.write(pcm);
+
+    return out.flush();
+}
+
 
 template <typename T>
 constexpr bool is_one_of(T value, std::initializer_list<T> list)
@@ -164,9 +216,6 @@ void AppEngine::startRecording()
     }
 
     assert(recorder_);
-
-    // Clear old file if needed; AudioFileWriter should reopen it
-    QFile::remove(pcm_file_path_);
 
     recorder_->start();
     setState(State::Recording);
@@ -549,6 +598,27 @@ void AppEngine::setInputAudioFile(const QUrl &path)
 void AppEngine::transcribeFile()
 {
     startTransribeFile(transcribe_from_file_path_);
+}
+
+void AppEngine::saveAudioToFile(const QUrl &path)
+{
+    // Check if PCM file exists pcm_file_path_
+    if (!QFile::exists(pcm_file_path_)) {
+        LOG_WARN_N << "No recorded PCM file to save. Expected \"" << pcm_file_path_
+                   << "\" to exist.";
+        failed(tr("No recorded audio to save."));
+        return;
+    }
+
+    const auto local_path = path.toLocalFile();
+    LOG_INFO_N << "Saving recorded audio to: " << local_path;
+
+    writeWavFromRawPcm16(
+        pcm_file_path_,
+        path.toLocalFile(),
+        16000,
+        1
+    );
 }
 
 AppEngine::AppEngine() {
@@ -975,11 +1045,12 @@ QCoro::Task<bool> AppEngine::prepareTranscriberModels()
                 }
 
                 if (auto conversation = transcribe_conversation_) {
-                    conversation->addMessage(
-                        make_shared<ChatMessage>(PromptRole::Assistant,
-                                                 "",
-                                                 false,
-                                                 tr("Live transcript").toStdString()));
+                    auto msg = make_shared<ChatMessage>(PromptRole::Assistant,
+                                                        "",
+                                                        false,
+                                                        tr("Live transcript").toStdString());
+                    msg->model_used = rec_transcriber_->modelInfo().id;
+                    conversation->addMessage(std::move(msg));
 
                     // capture weak ptr to avoid cyclic ref
                     auto wconversation = weak_ptr<ChatConversation>(conversation);
@@ -1313,6 +1384,7 @@ QCoro::Task<void> AppEngine::onRecordingDone()
         auto msg = make_shared<ChatMessage>(PromptRole::Assistant, "",
                                             false,
                                             tr("Transcript").toStdString());
+        msg->model_used = post_transcriber_->modelInfo().id;
         transcribe_conversation_->addMessage(msg);
         ScopedTimer timer;
         if (!co_await post_transcriber_->transcribeRecording()) {
@@ -1363,6 +1435,7 @@ QCoro::Task<void> AppEngine::onRecordingDone()
         auto msg = make_shared<ChatMessage>(PromptRole::Assistant, "",
                                             false,
                                             tr("Rewrite").toStdString());
+        msg->model_used = doc_prepare_model_->modelInfo().id;
         transcribe_conversation_->addMessage(msg);
         ScopedTimer timer;
 
@@ -1413,6 +1486,7 @@ QCoro::Task<void> AppEngine::onRecordingDone()
         auto msg = make_shared<ChatMessage>(PromptRole::Assistant, "",
                                             false,
                                             tr("Translate").toStdString());
+        msg->model_used = doc_translate_model_->modelInfo().id;
         transcribe_conversation_->addMessage(msg);
         ScopedTimer timer;
         auto result = co_await doc_translate_model_->prompt(std::move(formatted_prompt),

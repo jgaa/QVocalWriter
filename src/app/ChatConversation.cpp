@@ -59,7 +59,17 @@ void ChatConversation::finalizeLastMessage()
         return;
     }
 
-    messages_.back()->completed = true;
+    auto &last = *messages_.back();
+
+    last.completed = true;
+
+    if (last.isAssistant() && last.duration_seconds == 0.0) {
+        // Less accurate duration calculation than tracking during generation.
+        // But better than no data at all.
+        auto now = std::chrono::system_clock::now();
+        last.duration_seconds = std::chrono::duration<double>(now - last.timestamp_).count();
+    }
+
     updateModel(model_, messages_, ChatMessagesModel::Updates::LastMessageChanged);
 }
 

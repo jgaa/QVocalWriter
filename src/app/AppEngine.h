@@ -118,6 +118,7 @@ public:
     Q_INVOKABLE QString aboutText() const;
     Q_INVOKABLE void setInputAudioFile(const QUrl& path);
     Q_INVOKABLE void transcribeFile();
+    Q_INVOKABLE void saveAudioToFile(const QUrl& path);
 
     AppEngine();
 

@@ -379,11 +379,11 @@ Item {
             spacing: 8
 
             Button {
-                text: qsTr("Save Transcript")
+                text: qsTr("Save Audio")
                 enabled: appEngine.state == AppEngine.Done
 
                 onClicked: {
-                    saveTranscriptDialog.open()
+                    saveAudioDialog.open()
                 }
             }
 
@@ -400,17 +400,17 @@ Item {
     }
 
     FileDialog {
-        id: saveTranscriptDialog
-        title: qsTr("Save Transcript")
+        id: saveAudioDialog
+        title: qsTr("Save Audio")
         fileMode: FileDialog.SaveFile
-        nameFilters: ["Text Files (*.txt)", "Markdown (*.md)", "All Files (*)"]
-        defaultSuffix: "txt"
+        nameFilters: ["Text Files (*.wav)", "All Files (*)"]
+        defaultSuffix: "wav"
 
         onAccepted: {
             console.log("Saving to:", selectedFile)
 
             // Call into C++ to save
-            appEngine.saveTranscriptToFile(selectedFile)
+            appEngine.saveAudioToFile(selectedFile)
         }
     }
 

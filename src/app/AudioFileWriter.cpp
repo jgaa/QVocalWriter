@@ -9,12 +9,14 @@ AudioFileWriter::AudioFileWriter(AudioRingBuffer *ring, chunk_queue_t *chunkQueu
     chunkQueue_(chunkQueue),
     file_(filePath)
 {
-    LOG_DEBUG_N << "Creating AudioFileWriter for file" << filePath;
+    LOG_DEBUG_N << "Creating AudioFileWriter for file: " << filePath;
     if (!file_.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         LOG_WARN_N << "Failed to open file" << filePath;
         throw runtime_error("Failed to open file");
     }
     thread_ = std::jthread([this] { run(); });
+
+    assert(QFile::exists(filePath));
 }
 
 AudioFileWriter::~AudioFileWriter()

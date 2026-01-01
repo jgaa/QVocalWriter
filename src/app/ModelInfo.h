@@ -6,6 +6,7 @@
 #include <vector>
 #include <cstdint>
 #include <ctime>
+#include <chrono>
 
 enum class PromptRole {
     System,
@@ -19,9 +20,17 @@ struct ChatMessage {
     std::string content;
     bool completed{true}; // false during assistants partial updates
     std::string stage;
-    time_t timestamp{time(nullptr)};
+    std::chrono::system_clock::time_point timestamp_{std::chrono::system_clock::now()};
     double duration_seconds{0.0}; // models time to generate a full response
     std::string model_used; // model that generated this message (for assistant role)
+
+    time_t timestamp() const {
+        return std::chrono::system_clock::to_time_t(timestamp_);
+    }
+
+    bool isAssistant() const noexcept {
+        return role == PromptRole::Assistant;
+    }
 };
 
 using messages_view_t = std::span<const ChatMessage * const>;
