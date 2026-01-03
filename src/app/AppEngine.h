@@ -58,6 +58,7 @@ class AppEngine : public QObject
     Q_PROPERTY(ChatMessagesModel* transcribeMessages READ transcribeMessages CONSTANT)
     Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged)
     Q_PROPERTY(TranscribeSource transcribeSource READ transcribeSource WRITE setTranscribeSource NOTIFY stateFlagsChanged)
+    Q_PROPERTY(QString transcribeVocabulary READ transcribeVocabulary WRITE setTranscribeVocabulary NOTIFY stateFlagsChanged)
 
 public:
     enum class State {
@@ -159,6 +160,8 @@ public:
     RewriteStyleModel* rewriteStyle() {
         return &rewrite_style_;
     }
+    QString transcribeVocabulary() const { return transcribe_vocabulary_; }
+    void setTranscribeVocabulary(const QString& vocab);
 
     int  languageIndex() const { return language_index_; }
     QString transcribeModelName() const { return transcribe_model_name_;}
@@ -293,6 +296,7 @@ private:
     Mode mode_{Mode::Transcribe};
     TranscribeSource transcribe_source_{TranscribeSource::Mic};
     QString transcribe_from_file_path_;
+    QString transcribe_vocabulary_;
 };
 
 std::ostream& operator << (std::ostream& os, AppEngine::State state);

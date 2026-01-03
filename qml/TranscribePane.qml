@@ -22,7 +22,7 @@ Item {
             spacing: 8
 
             Label {
-                text: qsTr("Input Source")
+                text: qsTr("Input")
             }
 
             ComboBox  {
@@ -60,13 +60,7 @@ Item {
                     srcFileDialog.open()
                 }
             }
-        }
 
-
-        // --- Language selection ---
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
 
             Label {
                 text: qsTr("Language")
@@ -95,7 +89,7 @@ Item {
             visible: inputSource.currentIndex == AppEngine.Mic
 
             Label {
-                text: qsTr("Live transcribe Model")
+                text: qsTr("Transcribe: Live")
                 Layout.alignment: Qt.AlignVCenter
             }
 
@@ -104,14 +98,9 @@ Item {
                 model: appEngine.liveTranscribeModels
                 enabled: root.canChangeSettings
             }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
 
             Label {
-                text: qsTr("Post transcription Model")
+                text: qsTr("Proper")
                 Layout.alignment: Qt.AlignVCenter
             }
 
@@ -127,7 +116,29 @@ Item {
             spacing: 8
 
             Label {
-                text: qsTr("Document preparation model")
+                text: qsTr("Vocabulary")
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            TextField {
+                id: vocabularyInput
+                Layout.fillWidth: true
+                placeholderText: qsTr("Enter custom vocabulary, comma-separated")
+                text: appEngine.transcribeVocabulary
+                enabled: root.canChangeSettings
+
+                onTextChanged: {
+                    appEngine.transcribeVocabulary = text
+                }
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Label {
+                text: qsTr("Format using")
                 Layout.alignment: Qt.AlignVCenter
             }
 
@@ -137,15 +148,9 @@ Item {
                 model: appEngine.docPrepareModels
                 enabled: root.canChangeSettings
             }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-            visible: docPrepareModelPicker.model.hasSelection
 
             Label {
-                text: qsTr("Output style")
+                text: qsTr("Target")
                 Layout.alignment: Qt.AlignVCenter
             }
 
@@ -274,47 +279,11 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
+            visible: downloadProgress.active
 
             DownloadProgress {
+                id: downloadProgress
                 Layout.fillWidth: true
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-
-            Label {
-                id: downloadLabel
-                property string name: ""
-                text: qsTr("Downloading " + name)
-                visible: downloadBar.visible
-            }
-
-            ProgressBar {
-                id: downloadBar
-                Layout.fillWidth: true
-
-                // local state to hold progress
-                property int bytesReceived: 0
-                property int bytesTotal: 0
-
-                from: 0
-                to: 1
-                value: bytesTotal > 0 ? bytesReceived / bytesTotal : 0
-
-                // only show while a download is actually running
-                visible: bytesTotal > 0 && bytesReceived < bytesTotal
-
-                // Listen to the C++ signal from appEngine
-                Connections {
-                    target: appEngine
-                    function onDownloadProgress(name, bytesReceivedArg, bytesTotalArg) {
-                        downloadBar.bytesReceived = bytesReceivedArg
-                        downloadBar.bytesTotal = bytesTotalArg
-                        downloadLabel.name = name
-                    }
-                }
             }
         }
 

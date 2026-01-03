@@ -47,6 +47,7 @@ public:
         std::optional<bool> print_progress;
         std::optional<bool> print_timestamps;
         std::optional<bool> print_realtime;
+        std::string vocabulary;
     };
 
     struct Segment {

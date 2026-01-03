@@ -174,6 +174,43 @@ QCoro::Task<void> Model::stop(bool justQuit)
     co_return;
 }
 
+void Model::setVocabulary(const std::string &vocab) noexcept {
+    std::set<std::string> tokens;
+
+    auto is_delim = [](char c) {
+        return std::isspace(static_cast<unsigned char>(c)) || c == ',';
+    };
+
+    std::string current;
+    for (char c : vocab) {
+        if (is_delim(c)) {
+            if (!current.empty()) {
+                tokens.insert(std::move(current));
+                current.clear();
+            }
+        } else {
+            current += c;
+        }
+    }
+    if (!current.empty()) {
+        tokens.insert(std::move(current));
+    }
+
+    // Build normalized comma-separated list
+    std::string normalized;
+    for (auto it = tokens.begin(); it != tokens.end(); ++it) {
+        if (it != tokens.begin()) {
+            normalized += ", ";
+        }
+        normalized += *it;
+    }
+
+    LOG_DEBUG_EX(*this) << "Set vocabulary: " << normalized;
+    std::lock_guard lock{mutex_};
+    vocabulary_ = std::move(normalized);
+}
+
+
 void Model::setState(ModelState state)
 {
     if(state_ != state) {

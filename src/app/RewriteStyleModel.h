@@ -88,6 +88,9 @@ public:
 
     QString extra() const;
 
+    // formatted for use in prompts
+    QString vocabulary(QStringView vocab) const;
+
     Q_INVOKABLE void setSelected(int index);
 
     Q_INVOKABLE Kind selectedKind() const;
@@ -108,14 +111,8 @@ public:
     // ---- Prompt building ----
     /*!
      * Build a full prompt for the currently selected style.
-     *
-     * Placeholders:
-     *   %1 = extraConstraints (can be empty; should be short directives)
-     *        For social media, just the target: "Twitter/Facebook/Instagram/etc."
-     *
-     * If "None" is selected, returns an empty QString.
      */
-    Q_INVOKABLE QString makePrompt(std::string_view language = {}) const;
+    Q_INVOKABLE QString makePrompt(std::string_view language = {}, QStringView vocab = {}) const;
 
 private:
     struct Item {

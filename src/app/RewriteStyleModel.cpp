@@ -21,6 +21,8 @@ LANGUAGE CONSTRAINT (MANDATORY):
 - If input contains English words, keep them as-is.
 - If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
+%4
+
 Hard rules:
 - Do not invent facts. If something is unclear, either omit it or mark it as [unclear].
 - Keep the author's intent and voice, but remove filler, repetitions, and false starts.
@@ -48,6 +50,8 @@ LANGUAGE CONSTRAINT (MANDATORY):
 - If input contains English words, keep them as-is.
 - If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
+%4
+
 Hard rules:
 - Do not add facts not present in the transcription.
 - Remove filler words, repetitions, and tangents.
@@ -74,6 +78,8 @@ LANGUAGE CONSTRAINT (MANDATORY):
 - If input contains English words, keep them as-is.
 - If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
+%4
+
 Hard rules:
 - Do not invent claims, stats, or events.
 - Keep wording safe and non-defamatory.
@@ -94,6 +100,8 @@ LANGUAGE CONSTRAINT (MANDATORY):
 - Do not paraphrase into another language.
 - If input contains English words, keep them as-is.
 - If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
+
+%4
 
 Hard rules:
 - Do not invent APIs, commands, numbers, or behaviors.
@@ -125,6 +133,8 @@ LANGUAGE CONSTRAINT (MANDATORY):
 - If input contains English words, keep them as-is.
 - If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
+%4
+
 Hard rules:
 - Do not add attendees, decisions, or dates that are not present.
 - If names are unclear, keep them as spoken or mark [unknown speaker].
@@ -149,6 +159,8 @@ LANGUAGE CONSTRAINT (MANDATORY):
 - Do not paraphrase into another language.
 - If input contains English words, keep them as-is.
 - If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
+
+%4
 
 Hard rules:
 - Do not invent facts; only reorganize and clarify what’s there.
@@ -180,6 +192,8 @@ LANGUAGE CONSTRAINT (MANDATORY):
 - If input contains English words, keep them as-is.
 - If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
+%4
+
 Hard rules:
 - Stay faithful to the themes and content of the transcription.
 - You may improve imagery and flow, but do not introduce major new plot facts or real-world claims not implied.
@@ -201,6 +215,8 @@ LANGUAGE CONSTRAINT (MANDATORY):
 - Do not paraphrase into another language.
 - If input contains English words, keep them as-is.
 - If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
+
+%4
 
 Hard rules (very important):
 - Do NOT add, infer, or “smooth over” missing facts.
@@ -232,6 +248,8 @@ LANGUAGE CONSTRAINT (MANDATORY):
 - If input contains English words, keep them as-is.
 - If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
 
+%4
+
 Primary goal:
 - Preserve the emotional force, frustration, and strong opinions of the speaker.
 - Do NOT neutralize, soften, or “professionalize” the tone.
@@ -261,6 +279,8 @@ LANGUAGE CONSTRAINT (MANDATORY):
 - Do not paraphrase into another language.
 - If input contains English words, keep them as-is.
 - If you cannot comply, output: [LANGUAGE_CONSTRAINT_VIOLATION]
+
+%4
 
 Absolute rules:
 - Do NOT change meaning, tone, intent, or structure.
@@ -365,6 +385,18 @@ QString RewriteStyleModel::extra() const {
     return {};
 }
 
+
+QString RewriteStyleModel::vocabulary(QStringView vocab) const
+{
+    static const QString vocab_rule{R"(Locked vocabulary: (keep exactly; never translate; normalize near-matches to these spellings): %1.)"};
+
+    if (vocab.isEmpty()) {
+        return {};
+    }
+
+    return vocab_rule.arg(vocab);
+}
+
 void RewriteStyleModel::setSelected(int index)
 {
     if (index < 0 || index >= rowCount()) index = 0; // clamp to "none"
@@ -423,7 +455,7 @@ QString RewriteStyleModel::settingsKey() const {
 }
 
 
-QString RewriteStyleModel::makePrompt(std::string_view language) const
+QString RewriteStyleModel::makePrompt(std::string_view language, QStringView vocal) const
 {
     string language_opt = "Detect and preserve the original language.";
     if (!language.empty()) {
@@ -435,7 +467,7 @@ QString RewriteStyleModel::makePrompt(std::string_view language) const
 
     const auto tmpl = prompts[static_cast<size_t>(it.prompt_index)];
     const QString qtmpl = QString::fromUtf8(tmpl.data(), int(tmpl.size()));
-    return qtmpl.arg(extra(), language_opt, language);
+    return qtmpl.arg(extra(), language_opt, language, vocabulary(vocal));
 }
 
 int RewriteStyleModel::clampedSelected_() const noexcept

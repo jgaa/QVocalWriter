@@ -761,6 +761,14 @@ QStringList AppEngine::translateModels() const
     return models;
 }
 
+void AppEngine::setTranscribeVocabulary(const QString &vocab) {
+    if (vocab != transcribe_vocabulary_) {
+        transcribe_vocabulary_ = vocab;
+        LOG_TRACE_N << "Transcribe vocabulary set to: " << vocab.toStdString();
+        emit stateFlagsChanged();
+    }
+}
+
 bool AppEngine::canPrepareForTranscribe() const
 {
     const bool have_selection = live_transcribe_models_.hasSelection()
@@ -1381,6 +1389,8 @@ QCoro::Task<void> AppEngine::onRecordingDone()
             co_await post_transcriber_->loadModel();
         }
 
+        post_transcriber_->setVocabulary(transcribe_vocabulary_.toStdString());
+
         auto msg = make_shared<ChatMessage>(PromptRole::Assistant, "",
                                             false,
                                             tr("Transcript").toStdString());
@@ -1412,6 +1422,8 @@ QCoro::Task<void> AppEngine::onRecordingDone()
             co_await doc_prepare_model_->loadModel();
         }
 
+        doc_prepare_model_->setVocabulary(transcribe_vocabulary_.toStdString());
+
         setStateText(tr("Rewriting document..."));
 
         string formatted_prompt;
@@ -1420,7 +1432,7 @@ QCoro::Task<void> AppEngine::onRecordingDone()
             if (auto lngix = languageIndex(); lngix > 0) {
                 fromLng = languageList_.at(size_t(language_index_)).name.toStdString();
             }
-            const auto prompt = rewrite_style_.makePrompt(fromLng);
+            const auto prompt = rewrite_style_.makePrompt(fromLng, transcribe_vocabulary_);
 
             const array<ChatMessage, 2> msgs = {ChatMessage{PromptRole::System, prompt.toStdString()},
                                           {PromptRole::User, final_text.toStdString()}};
@@ -1466,6 +1478,8 @@ QCoro::Task<void> AppEngine::onRecordingDone()
             setStateText(tr("Loading translate model..."));
             co_await doc_translate_model_->loadModel();
         }
+
+        doc_translate_model_->setVocabulary(transcribe_vocabulary_.toStdString());
 
         setStateText(tr("Translating..."));
 

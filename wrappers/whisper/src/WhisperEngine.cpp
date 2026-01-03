@@ -297,7 +297,9 @@ bool WhisperSessionCtxImpl::whisperFull(std::span<const float> data, const Whisp
     if (params.print_realtime.has_value()) {
         p.print_realtime = params.print_realtime.value();
     }
-    // Set number of threads
+    if (!params.vocabulary.empty()) {
+        p.initial_prompt = params.vocabulary.c_str();
+    }
 
     p.n_threads = EngineBase::getThreads(params.threads);
 

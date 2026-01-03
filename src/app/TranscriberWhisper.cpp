@@ -318,7 +318,10 @@ bool TranscriberWhisper::processRecording(std::span<const float> data)
     params.max_len          = 0;     // no token limit
     params.token_timestamps = true;
 
-    LOG_DEBUG_EX(*this) << "Calling whisper_full() with " << data.size() << " samples.";
+    params.vocabulary = vocabulary();
+
+    LOG_DEBUG_EX(*this) << "Calling whisper_full() with " << data.size()
+                        << " samples and vocabulary: " << params.vocabulary;
     qvw::WhisperSessionCtx::Transcript transcript_out;
     ScopedTimer timer;
     const auto ok = session_ctx_->whisperFull(data, params, transcript_out);

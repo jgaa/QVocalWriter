@@ -145,6 +145,13 @@ public:
         return config().model_info.name;
     }
 
+    void setVocabulary(const std::string &vocab) noexcept;
+
+    std::string vocabulary() const noexcept {
+        std::lock_guard lock{mutex_};
+        return vocabulary_;
+    }
+
 protected:
     void setState(ModelState state);
     bool failed(QString message);
@@ -166,11 +173,12 @@ private:
 
     std::string name_;
     std::unique_ptr<Config> config_;
+    std::string vocabulary_;
     std::shared_ptr<ModelInstance> model_instance_;
     std::atomic<ModelState> state_{ModelState::CREATED};
     std::optional<std::jthread> worker_;
     cmd_queue_t cmd_queue_;
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
     std::atomic_bool have_context_{false};
     std::atomic_bool is_loaded_{false};
     bool is_stopped_{false};
