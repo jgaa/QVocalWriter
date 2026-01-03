@@ -7,7 +7,9 @@
 #include <QQmlContext>
 #include <QSettings>
 #include <QStandardPaths>
-
+#include <QIcon>
+#include <QDir>
+#include <QDebug>
 
 #include "AppEngine.h"
 #include "logging.h"
@@ -36,9 +38,15 @@ int main(int argc, char *argv[])
 {   
     QGuiApplication app(argc, argv);
 
+    qDebug() << "Top-level under :/qt/qml =" << QDir(":/qt/qml").entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    qDebug() << "QVocalWriter files =" << QDir(":/qt/qml/QVocalWriter").entryList(QDir::AllEntries | QDir::NoDotAndDotDot);
+    qDebug() << "icons files =" << QDir(":/qt/qml/QVocalWriter/icons").entryList(QDir::AllEntries | QDir::NoDotAndDotDot);
+
+
     // Set application information
-    QCoreApplication::setOrganizationName("The Last Viking LTD");
-    QCoreApplication::setApplicationName("QVocalWriter");
+    app.setOrganizationName("The Last Viking LTD");
+    app.setApplicationName("QVocalWriter");
+    app.setWindowIcon(QIcon(":/icons/qvw.svg"));
 
     QSettings settings;
 

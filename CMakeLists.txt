@@ -25,44 +25,6 @@ FetchContent_Declare(
   #GIT_TAG
 )
 
-# # llama.cpp
-# FetchContent_Declare(
-#   llama_cpp
-#   GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
-#   # Prefer pinning to a release tag or commit for reproducible builds:
-#   GIT_TAG master
-# )
-
-# # CPU-only: disable all GPU/backends for now
-# set(GGML_CUDA     OFF CACHE BOOL "" FORCE)
-# set(GGML_HIPBLAS  OFF CACHE BOOL "" FORCE)
-# set(GGML_VULKAN   OFF CACHE BOOL "" FORCE)
-# set(GGML_METAL    OFF CACHE BOOL "" FORCE)
-# set(GGML_SYCL     OFF CACHE BOOL "" FORCE)
-# set(GGML_OPENCL   OFF CACHE BOOL "" FORCE)
-# set(GGML_RPC      OFF CACHE BOOL "" FORCE)
-# set(GGML_KOMPUTE  OFF CACHE BOOL "" FORCE)
-# set(GGML_CANN     OFF CACHE BOOL "" FORCE)
-# set(GGML_MUSA     OFF CACHE BOOL "" FORCE)
-
-# # Also keep BLAS off for now (simple/portable CPU baseline)
-# set(GGML_BLAS     OFF CACHE BOOL "" FORCE)
-# set(GGML_OPENBLAS OFF CACHE BOOL "" FORCE)
-
-
-# # whisper.cpp
-# FetchContent_Declare(
-#   whisper_cpp
-#   GIT_REPOSITORY https://github.com/ggml-org/whisper.cpp.git
-#   GIT_TAG master
-# )
-
-# Configure whisper.cpp BEFORE MakeAvailable
-# (these are CMake options defined by whisper.cpp itself)
-# set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-# set(WHISPER_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
-# set(WHISPER_BUILD_SERVER   OFF CACHE BOOL "" FORCE)
-
 # QCoro (coroutines for Qt5/Qt6)
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
@@ -71,11 +33,7 @@ FetchContent_Declare(
   GIT_TAG v0.12.0
 )
 
-#FetchContent_MakeAvailable(logfault_src llama_cpp whisper_cpp qcoro)
-# FetchContent_MakeAvailable(whisper_cpp)
-# FetchContent_MakeAvailable(llama_cpp)
 FetchContent_MakeAvailable(logfault_src qcoro)
-
 
 # ---------- Externally built libraries begin
 
@@ -167,6 +125,11 @@ set(QML_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+qt_add_resources(${PROJECT_NAME} app_icons
+    PREFIX "/"
+    FILES icons/qvw.svg
+)
+
 qt_add_qml_module(${PROJECT_NAME}
     URI ${PROJECT_NAME}
     VERSION 1.0
@@ -182,6 +145,7 @@ qt_add_qml_module(${PROJECT_NAME}
           qml/common.js
           qml/settings/GeneralSettings.qml
           qml/settings/SettingsDlg.qml
+          qml/MessagesView.qml
       SOURCES
           include/qvw/EngineBase.h
           include/qvw/LlamaEngine.h
@@ -224,8 +188,8 @@ qt_add_qml_module(${PROJECT_NAME}
           src/app/Transcriber.h
           src/app/TranscriberWhisper.cpp
           src/app/TranscriberWhisper.h
-          QML_FILES qml/MessagesView.qml
-          SOURCES src/app/AudioImport.h src/app/AudioImport.cpp
+          src/app/AudioImport.h
+          src/app/AudioImport.cpp
 )
 
 # Add includepaths
