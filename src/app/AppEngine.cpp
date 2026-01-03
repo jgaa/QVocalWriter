@@ -958,7 +958,7 @@ QCoro::Task<void> AppEngine::startPrepareForChat(QString id)
 {
     LOG_INFO_N << "Preparing for chat with model: " << id;
 
-    setStateText(tr("Preparing chat model..."));
+    setState(State::Preparing, tr("Preparing chat model..."));
 
     auto mi = ModelMgr::instance().findModelById(ModelKind::GENERAL, id);
 

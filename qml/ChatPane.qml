@@ -115,7 +115,8 @@ Item {
                     Button {
                         id: sendButton
                         text: qsTr("Send")
-                        enabled: !appEngine.isBusy && promptEdit.text.trim().length > 0
+                        enabled: appEngine.state === AppEngine.Ready
+                                 && promptEdit.text.trim().length > 0
 
                         onClicked: {
                             const p = promptEdit.text.trim()
