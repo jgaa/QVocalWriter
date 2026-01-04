@@ -150,12 +150,14 @@ Item {
             }
 
             Label {
+                visible: docPrepareModelPicker.model.hasSelection
                 text: qsTr("Target")
                 Layout.alignment: Qt.AlignVCenter
             }
 
             ComboBox {
                 id: rewriteStyleCombo
+                visible: docPrepareModelPicker.model.hasSelection
                 Layout.fillWidth: true
                 model: appEngine.rewriteStyle
                 textRole: "name"
@@ -168,7 +170,7 @@ Item {
             ComboBox {
                 id: socialMediaType
                 editable: true
-                visible: rewriteStyleCombo.model.isSocialMedia
+                visible: rewriteStyleCombo.model.isSocialMedia && rewriteStyleCombo.visible
                 enabled: root.canChangeSettings
                 model: [
                     "X/Twitter", "Linkedin", "Reddit", "Facebook",
@@ -192,7 +194,7 @@ Item {
             ComboBox {
                 id: creativeWritingTarget
                 editable: true
-                visible: rewriteStyleCombo.model.isCreativeWriting
+                visible: rewriteStyleCombo.model.isCreativeWriting && rewriteStyleCombo.visible
                 enabled: root.canChangeSettings
                 model: [
                     qsTr("Dialogue Scene"),
