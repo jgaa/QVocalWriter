@@ -467,7 +467,10 @@ QString RewriteStyleModel::makePrompt(std::string_view language, QStringView voc
 
     const auto tmpl = prompts[static_cast<size_t>(it.prompt_index)];
     const QString qtmpl = QString::fromUtf8(tmpl.data(), int(tmpl.size()));
-    return qtmpl.arg(extra(), language_opt, language, vocabulary(vocal));
+    return qtmpl.arg(extra(),
+                     QString::fromStdString(language_opt),
+                     QString::fromUtf8(language),
+                     vocabulary(vocal));
 }
 
 int RewriteStyleModel::clampedSelected_() const noexcept

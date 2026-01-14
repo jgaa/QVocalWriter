@@ -1,4 +1,5 @@
 
+#include <set>
 #include <array>
 #include <string_view>
 
@@ -294,7 +295,9 @@ void Model::run() noexcept
                     break;
             }
         } catch (const exception& ex) {
-            failed(tr("%1 Caught exception in command loop: %2").arg(name()).arg(ex.what()));
+            failed(tr("%1 Caught exception in command loop: %2")
+                       .arg(QString::fromStdString(name()))
+                       .arg(ex.what()));
         }
     }
 

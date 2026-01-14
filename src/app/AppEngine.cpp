@@ -465,10 +465,10 @@ void AppEngine::onModelChangedState(const Model *model, ModelState state)
     assert(model);
     LOG_TRACE_N << "Model " << model->name() << " changed state to " << state;
     if (state == ModelState::LOADING) {
-        setStateText(tr("Loading model: %1").arg(model->modelInfo().id));
+        setStateText(tr("Loading model: %1").arg(QString::fromUtf8(model->modelInfo().id)));
     }
     if (state == ModelState::LOADED) {
-        setStateText(tr("Model loaded: %1").arg(model->modelInfo().id));
+        setStateText(tr("Model loaded: %1").arg(QString::fromUtf8(model->modelInfo().id)));
     }
 }
 
@@ -1001,7 +1001,8 @@ QCoro::Task<void> AppEngine::startPrepareForTranslation()
         );
 
     if (!mi) {
-        failed(tr("Translation model not found: %1").arg(translation_models_.currentId()));
+        failed(tr("Translation model not found: %1")
+                   .arg(QString::fromUtf8(translation_models_.currentId())));
         co_return;
     }
     assert(mi);
