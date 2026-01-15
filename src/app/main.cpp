@@ -50,11 +50,6 @@ int main(int argc, char *argv[])
 
     QSettings settings;
 
-    // Set up a log-handler to stdout
-    // TODO: Make this configurable via command-line arguments or config file
-    // logfault::LogManager::Instance().AddHandler(make_unique<logfault::StreamHandler>(clog, logfault::LogLevel::DEBUGGING));
-    // LFLOG_INFO << "Logging to std::clog is enabled";
-
     AppEngine::initLogging();
 
     LOG_INFO << "Starting QVocalWriter " << APP_VERSION;
@@ -76,7 +71,7 @@ int main(int argc, char *argv[])
         []() { QCoreApplication::exit(-1); },
         Qt::QueuedConnection);
 
-    qml_engine.load(QUrl(QStringLiteral("qrc:/QVocalWriter/qml/Main.qml")));
+    qml_engine.loadFromModule("QVocalWriter", "Main");
 
     return app.exec();
 }
