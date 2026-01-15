@@ -54,7 +54,8 @@ it makes sense, but without tight coupling.
 ### Prerequisites
 
 * CMake
-* Qt 6.10 or later (Qt Quick and QML modules)
+* Qt 6.8 or later (Qt Multimedia, Qt Quick and QML modules)
+* C++20 capable c++ compiler, for example g++-13 or better
 
 ### Build instructions
 
