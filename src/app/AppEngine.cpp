@@ -581,7 +581,7 @@ Interact with language models for drafting, rewriting, research and exploration.
 ## Credits
 
 Developed by **Jarle Aase**, [The Last Viking LTD](https://lastviking.eu/)
-© 2025
+© 2025, 2026
 )").arg(APP_VERSION).arg(qVersion());
 
 }
