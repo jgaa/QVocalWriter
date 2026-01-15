@@ -10,30 +10,37 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 set(QCORO_WITH_QTQUICK OFF CACHE BOOL "" FORCE)
 set(QCORO_WITH_QML     OFF CACHE BOOL "" FORCE)
-set(QCORO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(QCORO_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(QCORO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
 set(QVW_ROOT=${CMAKE_CURRENT_SOURCE_DIR})
 
 
 include(FetchContent)
-FetchContent_Declare(
-  logfault_src
-  GIT_REPOSITORY https://github.com/jgaa/logfault.git
-  #FIND_PACKAGE_ARGS NAMES logfault
-  #GIT_TAG
-)
 
-# QCoro (coroutines for Qt5/Qt6)
-set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-FetchContent_Declare(
-  qcoro
+if(DEFINED FETCHCONTENT_SOURCE_DIR_whisper_cpp)
+  message(STATUS "Using pre-fetched llama.cpp: ${FETCHCONTENT_SOURCE_DIR_whisper_cpp}")
+endif()
+
+if(DEFINED FETCHCONTENT_SOURCE_DIR_llama_cpp)
+  message(STATUS "Using pre-fetched llama.cpp: ${FETCHCONTENT_SOURCE_DIR_llama_cpp}")
+endif()
+
+include(cmake/QvwFetch.cmake)
+
+qvw_fetch(qcoro
   GIT_REPOSITORY https://github.com/qcoro/qcoro.git
-  GIT_TAG v0.12.0
+  GIT_TAG        v0.12.0
 )
 
-FetchContent_MakeAvailable(logfault_src qcoro)
+qvw_fetch(logfault
+  GIT_REPOSITORY https://github.com/jgaa/logfault.git
+  GIT_TAG        v0.8.5
+)
+
 
 # ---------- Externally built libraries begin
 
@@ -102,13 +109,8 @@ add_dependencies(qvw::llama_wrap qvw_llama_wrap_ep)
 # ---------- Externally built libraries end
 
 find_package(Qt6 REQUIRED COMPONENTS Core Quick Qml Multimedia)
-find_package(Qt6 REQUIRED COMPONENTS Core)
-find_package(Qt6 REQUIRED COMPONENTS Core)
-find_package(Qt6 REQUIRED COMPONENTS Core)
-find_package(Qt6 REQUIRED COMPONENTS Core Quick)
-find_package(Qt6 REQUIRED COMPONENTS Core)
 
-qt_standard_project_setup(REQUIRES 6.4)
+qt_standard_project_setup(REQUIRES 6.8)
 
 qt_add_executable(${PROJECT_NAME}
     src/app/main.cpp
@@ -223,4 +225,10 @@ target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Core)
 set_target_properties(${PROJECT_NAME} PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
+)
+
+include(GNUInstallDirs)
+
+install(TARGETS ${PROJECT_NAME}
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
