@@ -57,6 +57,84 @@ it makes sense, but without tight coupling.
 * Qt 6.8 or later (Qt Multimedia, Qt Quick and QML modules)
 * C++20 capable c++ compiler, for example g++-13 or better
 
+### GPU backend selection
+
+`QVocalWriter` builds both `whisper.cpp` and `llama.cpp` wrappers with a shared backend selector:
+
+* CMake cache variable: `QVW_GPU_BACKEND`
+* Supported values: `VULKAN` (default), `VULCAN` (alias), `CUDA`, `ROCM`, `METAL`, `NONE`
+
+Example:
+
+```bash
+cmake -S . -B build -DQVW_GPU_BACKEND=VULKAN
+cmake --build build
+```
+
+Notes:
+
+* `VULKAN` requires both Vulkan headers and `glslc` (shader compiler), because GGML uses `find_package(Vulkan COMPONENTS glslc REQUIRED)`.
+* `CUDA` requires CUDA toolkit and NVIDIA driver stack.
+* `ROCM` requires HIP + rocBLAS + hipBLAS development packages.
+* `METAL` is macOS-only; on Linux distros below, use `NONE` instead.
+
+### Linux package prerequisites by backend
+
+The package names below are what you typically need in addition to your normal C++/Qt toolchain.
+
+#### Debian / Ubuntu
+
+```bash
+# Vulkan backend
+sudo apt install libvulkan-dev glslc
+
+# CUDA backend (distro package)
+sudo apt install nvidia-cuda-toolkit
+# or (NVIDIA upstream repo):
+# sudo apt install cuda-toolkit
+
+# ROCm backend
+sudo apt install libamdhip64-dev libhipblas-dev librocblas-dev
+```
+
+#### Fedora
+
+```bash
+# Vulkan backend
+sudo dnf install vulkan-loader-devel glslc
+
+# CUDA backend (NVIDIA CUDA repo enabled)
+sudo dnf install cuda-toolkit
+
+# ROCm backend
+sudo dnf install rocm-hip-devel hipblas-devel rocblas-devel
+```
+
+#### SUSE / openSUSE
+
+```bash
+# Vulkan backend
+sudo zypper install vulkan-headers shaderc
+
+# CUDA backend (NVIDIA CUDA repo enabled)
+sudo zypper install cuda-toolkit
+```
+
+ROCm on openSUSE/SUSE depends heavily on distro/repo combination (official vs community ROCm repos) and package naming may vary. Look for HIP + BLAS dev packages in your enabled repo set (for example `hip`, `hipblas`, `rocblas`, and corresponding `-devel` packages where available).
+
+#### Arch Linux
+
+```bash
+# Vulkan backend
+sudo pacman -S vulkan-headers vulkan-icd-loader shaderc
+
+# CUDA backend
+sudo pacman -S cuda
+
+# ROCm backend
+sudo pacman -S rocm-hip-sdk
+```
+
 ### Build instructions
 
 ```bash
@@ -71,4 +149,3 @@ cmake --build .
 ```bash
 ./build/bin/QVocalWriter
 ```
-

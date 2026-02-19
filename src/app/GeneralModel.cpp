@@ -29,7 +29,7 @@ GeneralModel::~GeneralModel()
 QCoro::Task<bool> GeneralModel::prompt(std::string text, const qvw::LlamaSessionCtx::Params& params)
 {
     auto op = make_unique<Model::Operation>([this, text=std::move(text), params]() -> bool {
-        LOG_DEBUG_EX(*this) << "Prompting GeneralModel with text: " << text;
+        LOG_DEBUG_EX(*this) << "Prompting GeneralModel with input length=" << text.size();
 
         assert(session_ctx_ != nullptr);
         if (!session_ctx_) {
@@ -38,20 +38,21 @@ QCoro::Task<bool> GeneralModel::prompt(std::string text, const qvw::LlamaSession
 
         final_text_.clear();
 
-        LOG_TRACE_EX(*this) << "Starting prompt.: " << text;
+        LOG_TRACE_EX(*this) << "Starting prompt.";
         ScopedTimer timer;
         const bool result = session_ctx_->prompt(text, params);
 
         LOG_INFO_EX(*this) << "Prompt completed in "
                            << timer.elapsed() << " seconds.";
-        LOG_DEBUG_EX(*this) << "Full text result: " << session_ctx_->getFullTextResult();
+        LOG_DEBUG_EX(*this) << "Prompt completed with output length="
+                            << session_ctx_->getFullTextResult().size();
 
         return result;
     });
 
     auto future = op->future();
 
-    LOG_TRACE_EX(*this) << "Enqueuing prompt: " << text;
+    LOG_TRACE_EX(*this) << "Enqueuing prompt with input length=" << text.size();
     enqueueCommand(std::move(op));
     const auto result = co_await future;
     LOG_TRACE_EX(*this) << "TranscribeRecording command completed.";
@@ -81,7 +82,7 @@ bool GeneralModel::createContextImpl()
     }
 
     session_ctx_->setOnPartialTextCallback([this](const std::string &partial_text) {
-        LOG_TRACE_EX(*this) << "Received partial text: " << partial_text;
+        LOG_TRACE_EX(*this) << "Received partial text chunk length=" << partial_text.size();
         emit partialTextAvailable(QString::fromStdString(partial_text));
     });
 

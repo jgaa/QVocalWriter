@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <mutex>
 
 #include <QObject>
 #include <QQmlEngine>
@@ -41,6 +42,7 @@ public:
     }
 
     bool isLoaded() const noexcept {
+        const std::lock_guard<std::mutex> lock(load_state_mutex_);
         return loaded_count_ > 0;
     }
 
@@ -84,6 +86,8 @@ private:
     const ModelKind kind_;
     QString full_path_;
     int loaded_count_{};
+    mutable std::mutex load_state_mutex_;
+    std::mutex model_ctx_mutex_;
     ModelInfo model_info_;
     QString model_id_{QString::fromUtf8(model_info_.id)};
     std::shared_ptr<qvw::ModelCtx> model_ctx_;
@@ -154,7 +158,8 @@ private:
     QCoro::Task<bool> makeAvailable(ModelKind kind, const ModelInfo& modelInfo) noexcept;
     std::filesystem::path findModelPath(ModelKind kind, const ModelInfo &modelInfo) const;
     QCoro::Task<bool> downloadModel(ModelKind kind, const ModelInfo &modelInfo, const QString& fullPath) noexcept;
-    QCoro::Task<bool> downloadFile(const QString& name, const QUrl& url, const QString& fullPath) noexcept;
+    QCoro::Task<bool> downloadFile(const QString& name, const QUrl& url, const QString& fullPath,
+                                   const QString& expectedChecksum) noexcept;
 
     instances_map_t& instances(ModelKind kind) {
         return instances_.at(static_cast<size_t>(kind));

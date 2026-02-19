@@ -10,9 +10,39 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+set(QVW_GPU_BACKEND "VULKAN" CACHE STRING "GPU backend for whisper/llama wrappers (NONE, VULKAN/VULCAN, CUDA, METAL, ROCM)")
+set_property(CACHE QVW_GPU_BACKEND PROPERTY STRINGS NONE VULKAN VULCAN CUDA METAL ROCM)
+
+string(TOUPPER "${QVW_GPU_BACKEND}" QVW_GPU_BACKEND_UPPER)
+if(QVW_GPU_BACKEND_UPPER STREQUAL "VULCAN")
+  set(QVW_GPU_BACKEND_UPPER "VULKAN")
+endif()
+
+set(QVW_GPU_BACKEND_EFFECTIVE "${QVW_GPU_BACKEND_UPPER}")
+
+if(NOT QVW_GPU_BACKEND_UPPER MATCHES "^(NONE|VULKAN|CUDA|METAL|ROCM)$")
+  message(FATAL_ERROR "Invalid QVW_GPU_BACKEND='${QVW_GPU_BACKEND}'. Expected one of: NONE, VULKAN/VULCAN, CUDA, METAL, ROCM")
+endif()
+
+if(QVW_GPU_BACKEND_UPPER STREQUAL "VULKAN")
+  find_package(Vulkan COMPONENTS glslc QUIET)
+  if(NOT Vulkan_FOUND)
+    message(WARNING
+      "QVW_GPU_BACKEND=VULKAN requested, but Vulkan headers and/or glslc were not found. "
+      "Falling back to CPU-only backend (NONE).")
+    set(QVW_GPU_BACKEND_EFFECTIVE "NONE")
+  endif()
+endif()
+
+message(STATUS "QVW GPU backend requested: ${QVW_GPU_BACKEND_UPPER}, effective: ${QVW_GPU_BACKEND_EFFECTIVE}")
+
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(QCORO_WITH_QTDBUS  OFF CACHE BOOL "" FORCE)
+set(QCORO_WITH_QTNETWORK ON CACHE BOOL "" FORCE)
+set(QCORO_WITH_QTWEBSOCKETS OFF CACHE BOOL "" FORCE)
 set(QCORO_WITH_QTQUICK OFF CACHE BOOL "" FORCE)
 set(QCORO_WITH_QML     OFF CACHE BOOL "" FORCE)
+set(QCORO_WITH_QTTEST  OFF CACHE BOOL "" FORCE)
 set(QCORO_BUILD_TESTING OFF CACHE BOOL "" FORCE)
 set(QCORO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
@@ -47,6 +77,9 @@ qvw_fetch(logfault
 include(ExternalProject)
 
 set(QVW_DEPS_PREFIX "${CMAKE_BINARY_DIR}/_deps_install")
+set(QVW_SHARED_LIB_DIR "${QVW_DEPS_PREFIX}/lib")
+set(QVW_WHISPER_WRAP_LIB "${QVW_SHARED_LIB_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}qvw_whisper_wrap${CMAKE_SHARED_LIBRARY_SUFFIX}")
+set(QVW_LLAMA_WRAP_LIB "${QVW_SHARED_LIB_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}qvw_llama_wrap${CMAKE_SHARED_LIBRARY_SUFFIX}")
 
 ########### Whisper
 
@@ -55,7 +88,8 @@ ExternalProject_Add(qvw_whisper_wrap_ep
 
   CMAKE_ARGS
     -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}
-    -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=${QVW_DEPS_PREFIX}/lib
+    -DQVW_GPU_BACKEND:STRING=${QVW_GPU_BACKEND_EFFECTIVE}
+    -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=${QVW_SHARED_LIB_DIR}
     -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=<BINARY_DIR>/private-archives
 
   BUILD_COMMAND
@@ -64,14 +98,14 @@ ExternalProject_Add(qvw_whisper_wrap_ep
   INSTALL_COMMAND ""
 
   BUILD_BYPRODUCTS
-    ${QVW_DEPS_PREFIX}/lib/libqvw_whisper_wrap.so
+    ${QVW_WHISPER_WRAP_LIB}
 )
 
 # Create an imported target that your app links to
 add_library(qvw::whisper_wrap SHARED IMPORTED GLOBAL)
 
 set_target_properties(qvw::whisper_wrap PROPERTIES
-  IMPORTED_LOCATION "${QVW_DEPS_PREFIX}/lib/libqvw_whisper_wrap.so"
+  IMPORTED_LOCATION "${QVW_WHISPER_WRAP_LIB}"
   #INTERFACE_INCLUDE_DIRECTORIES "${QVW_DEPS_PREFIX}/include"
 )
 
@@ -79,14 +113,13 @@ add_dependencies(qvw::whisper_wrap qvw_whisper_wrap_ep)
 
 ############### Llama
 
-set(QVW_DEPS_PREFIX "${CMAKE_BINARY_DIR}/_deps_install")
-
 ExternalProject_Add(qvw_llama_wrap_ep
   SOURCE_DIR  "${CMAKE_SOURCE_DIR}/wrappers/llama"
 
   CMAKE_ARGS
     -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}
-    -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=${QVW_DEPS_PREFIX}/lib
+    -DQVW_GPU_BACKEND:STRING=${QVW_GPU_BACKEND_EFFECTIVE}
+    -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=${QVW_SHARED_LIB_DIR}
     -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=<BINARY_DIR>/private-archives
 
   BUILD_COMMAND
@@ -95,12 +128,12 @@ ExternalProject_Add(qvw_llama_wrap_ep
   INSTALL_COMMAND ""
 
   BUILD_BYPRODUCTS
-    ${QVW_DEPS_PREFIX}/lib/libqvw_llama_wrap.so
+    ${QVW_LLAMA_WRAP_LIB}
 )
 
 add_library(qvw::llama_wrap SHARED IMPORTED GLOBAL)
 set_target_properties(qvw::llama_wrap PROPERTIES
-  IMPORTED_LOCATION "${QVW_DEPS_PREFIX}/lib/libqvw_llama_wrap.so"
+  IMPORTED_LOCATION "${QVW_LLAMA_WRAP_LIB}"
 )
 
 add_dependencies(qvw::llama_wrap qvw_llama_wrap_ep)
@@ -118,11 +151,6 @@ qt_add_executable(${PROJECT_NAME}
 )
 
 
-target_link_libraries(QVocalWriter PRIVATE Qt6::Core)
-target_link_libraries(QVocalWriter PRIVATE Qt6::Core)
-target_link_libraries(QVocalWriter PRIVATE Qt6::Core)
-target_link_libraries(QVocalWriter PRIVATE Qt6::Core Qt6::Quick)
-target_link_libraries(QVocalWriter PRIVATE Qt6::Core)
 set(QML_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -217,10 +245,6 @@ target_link_libraries(${PROJECT_NAME}
         QCoro6::Core
         QCoro6::Network
 )
-
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Core)
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Core)
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Core)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     WIN32_EXECUTABLE TRUE

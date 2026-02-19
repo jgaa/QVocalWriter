@@ -20,6 +20,10 @@ namespace qvw {
 
 namespace {
 
+#ifndef QVW_LLAMA_CPP_TAG
+#define QVW_LLAMA_CPP_TAG "unknown"
+#endif
+
 // -------------------------
 // Logging bridge
 // -------------------------
@@ -223,11 +227,7 @@ public:
     }
 
     string version() const override {
-        if (const auto * p = llama_print_system_info()) {
-            return p;
-        }
-
-        return "llama.cpp (version unknown)";
+        return format("llama.cpp {}", QVW_LLAMA_CPP_TAG);
     }
 
     bool init() override {

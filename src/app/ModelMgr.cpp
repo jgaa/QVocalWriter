@@ -4,6 +4,7 @@
 #include <QSaveFile>
 #include <QNetworkReply>
 #include <QFile>
+#include <QCryptographicHash>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QFuture>
 #include <QSettings>
@@ -88,7 +89,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
         mi_t::Q4_0,
         4920,
-        "",
+        "854506123b68372492b8a99bb3a999594672b394791cf1153f8da5ffb5f1c59a",
         mi_t::Chat | mi_t::Rewrite,
         "https://huggingface.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/"
     },
@@ -99,7 +100,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
         mi_t::Q4_0,
         4200,
-        "",
+        "8a45e4e923f03f4106bcc375cb83fc383c2c570529acb2085c6468df10b50ad5",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
         "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/"
     },
@@ -112,7 +113,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         "Mistral-Small-Instruct-2409-Q4_K_M.gguf",
         mi_t::Q4_0,
         13340,
-        "",
+        "c09c00735cd44c7aee7ef134f801e08cbdf130519d7b7bbb5f5d009b11a1f525",
         mi_t::Chat | mi_t::Rewrite,
         "https://huggingface.co/bartowski/Mistral-Small-Instruct-2409-GGUF/resolve/main/"
     },
@@ -123,7 +124,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         "Qwen2.5-14B-Instruct-Q4_K_M.gguf",
         mi_t::Q4_0,
         8990,
-        "",
+        "d989c91de35f32c18bdb8bec96a4b9fff2c3e5bca066503c63a5ca54dd537a4b",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
         "https://huggingface.co/bartowski/Qwen2.5-14B-Instruct-GGUF/resolve/main/"
     },
@@ -136,7 +137,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         "Meta-Llama-3.1-70B-Instruct-Q4_K_M.gguf",
         mi_t::Q4_0,
         42520,
-        "",
+        "273c07cdbbca671fa5e8fc091b7a012ace0e0354e04a54a2ed5cc645921c15bc",
         mi_t::Chat | mi_t::Rewrite,
         "https://huggingface.co/bartowski/Meta-Llama-3.1-70B-Instruct-GGUF/resolve/main/"
     },
@@ -147,7 +148,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         "Qwen2.5-32B-Instruct-Q4_K_M.gguf",
         mi_t::Q4_0,
         19850,
-        "",
+        "c933aa99b1a3e41ac7ceb16c6794caedbc41e6b40774085b387c1f081ea243cd",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
         "https://huggingface.co/bartowski/Qwen2.5-32B-Instruct-GGUF/resolve/main/"
     },
@@ -161,7 +162,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         "Meta-Llama-3.1-70B-Instruct-Q5_K_S.gguf",
         mi_t::Q5_1,
         48657,
-        "",
+        "2f9e44169d7cea93e029d6f8df76f3e801f7efe6f4c8ecc850dc233d81c28862",
         mi_t::Chat | mi_t::Rewrite,
         "https://huggingface.co/bartowski/Meta-Llama-3.1-70B-Instruct-GGUF/resolve/main/"
     },
@@ -172,7 +173,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         "Qwen2.5-72B-Instruct-Q4_K_M.gguf",
         mi_t::Q4_0,
         47420,
-        "",
+        "596abc840bcb94285f1bcc49f762c5e76a6ffbaf4135dcc7d1d0fde963c5aa8b",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
         "https://huggingface.co/bartowski/Qwen2.5-72B-Instruct-GGUF/resolve/main/"
     },
@@ -185,7 +186,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         "mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf",
         mi_t::Q4_0,
         26400,
-        "",
+        "5b1060e7b0e484e0ad266b5bfd4ad6a5cc4a05ef0c3d3981bd06b340e1fa0f25",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
         "https://huggingface.co/TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF/resolve/main/"
     },
@@ -197,7 +198,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         "OpenAI-20B-NEOPlus-Uncensored-Q5_1.gguf",
         mi_t::Q4_0,
         15729,
-        "",
+        "87b4b90e5fd15d1f28c5708c9437f23c6a56b9d10db3c1b38c05ded46ecf1db6",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
         "https://huggingface.co/DavidAU/OpenAi-GPT-oss-20b-HERETIC-uncensored-NEO-Imatrix-gguf/resolve/main/OpenAI-20B-NEOPlus-Uncensored-Q5_1.gguf?download=true"
     },
@@ -209,7 +210,7 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         "Nidum-Limitless-Gemma-2B-F16.gguf",
         mi_t::FP16,
         5018,
-        "",
+        "08f155b3c16e2dcd58e3a5f3d2b0c0a24ff3ee6c15d261db758808c44fbfdac7",
         mi_t::Chat | mi_t::Rewrite,
         "https://huggingface.co/VibeStudio/Nidum-Gemma-2B-Uncensored-GGUF/resolve/main/Nidum-Limitless-Gemma-2B-F16.gguf?download=true"
     },
@@ -272,13 +273,63 @@ string_view dirPrefix(ModelKind kind) {
     return prefixes.at(static_cast<size_t>(kind));
 }
 
-string_view modelDownloadUrlBase(ModelKind kind) {
-    constexpr auto urls = std::to_array<const char*>({
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/",
-        ""
-    });
+constexpr int kDownloadTimeoutMs = 5 * 60 * 1000;
 
-    return urls.at(static_cast<size_t>(kind));
+std::optional<QCryptographicHash::Algorithm> hashAlgorithmForChecksum(const QString& checksum)
+{
+    if (checksum.isEmpty()) {
+        return std::nullopt;
+    }
+
+    const auto normalized = checksum.trimmed();
+    for (const auto ch : normalized) {
+        if (!ch.isDigit() && (ch.toLower() < QChar{'a'} || ch.toLower() > QChar{'f'})) {
+            return std::nullopt;
+        }
+    }
+
+    if (normalized.size() == 40) {
+        return QCryptographicHash::Sha1;
+    }
+
+    if (normalized.size() == 64) {
+        return QCryptographicHash::Sha256;
+    }
+
+    return std::nullopt;
+}
+
+bool verifyFileChecksum(const QString& filePath, const QString& expectedChecksum)
+{
+    const auto algorithm = hashAlgorithmForChecksum(expectedChecksum);
+    if (!algorithm) {
+        LOG_ERROR_N << "Unsupported checksum format for " << filePath
+                    << ". expected='" << expectedChecksum << "'";
+        return false;
+    }
+
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        LOG_ERROR_N << "Failed to open downloaded file for checksum verification: " << filePath;
+        return false;
+    }
+
+    QCryptographicHash hash(*algorithm);
+    if (!hash.addData(&file)) {
+        LOG_ERROR_N << "Failed to read downloaded file while computing checksum: " << filePath;
+        return false;
+    }
+
+    const auto actual = QString::fromLatin1(hash.result().toHex());
+    const auto expected = expectedChecksum.trimmed().toLower();
+    if (actual != expected) {
+        LOG_ERROR_N << "Checksum verification failed for " << filePath
+                    << ". expected=" << expected
+                    << ", actual=" << actual;
+        return false;
+    }
+
+    return true;
 }
 
 } // anon ns
@@ -490,7 +541,8 @@ QCoro::Task<bool> ModelMgr::downloadModel(ModelKind kind, const ModelInfo &model
                  << ", url='" << url.toString() << "'"
                  << ", path='" << fullPath << "'";
 
-    const bool success = co_await downloadFile(id, url, fullPath);
+    const bool success = co_await downloadFile(
+        id, url, fullPath, QString::fromUtf8(modelInfo.sha).trimmed());
     if (!success) {
         LOG_ERROR_N << "Failed to download model file: " << url.toString();
         co_return false;
@@ -503,7 +555,8 @@ QCoro::Task<bool> ModelMgr::downloadModel(ModelKind kind, const ModelInfo &model
 
 QCoro::Task<bool> ModelMgr::downloadFile(const QString& name,
                                          const QUrl &url,
-                                         const QString &fullPath) noexcept
+                                         const QString &fullPath,
+                                         const QString& expectedChecksum) noexcept
 {
     if (!nam_) {
         nam_ = new QNetworkAccessManager(this);
@@ -515,6 +568,7 @@ QCoro::Task<bool> ModelMgr::downloadFile(const QString& name,
     const QString tmpPath = fullPath + ".part";
 
     QNetworkRequest request{url};
+    request.setTransferTimeout(kDownloadTimeoutMs);
     QNetworkReply *reply = nam_->get(request);
 
     // Ensure reply gets deleted and temp file cleaned up on early exit
@@ -640,6 +694,11 @@ QCoro::Task<bool> ModelMgr::downloadFile(const QString& name,
         co_return false;
     }
 
+    if (!expectedChecksum.isEmpty() && !verifyFileChecksum(tmpPath, expectedChecksum)) {
+        LOG_ERROR_N << "Rejecting downloaded file due to checksum verification failure: " << tmpPath;
+        co_return false;
+    }
+
     if (!QFile::rename(tmpPath, fullPath)) {
         LOG_ERROR_N << "Failed to rename temporary file "
                     << tmpPath
@@ -697,8 +756,15 @@ QCoro::Task<ModelMgr::model_ctx_t> ModelMgr::getInstance(ModelKind kind, const Q
 
 QCoro::Task<bool> ModelInstance::load() noexcept
 {
-    if (++loaded_count_ == 1) {
+    bool shouldLoad = false;
+    {
+        const std::lock_guard<std::mutex> lock(load_state_mutex_);
+        shouldLoad = (++loaded_count_ == 1);
+    }
+
+    if (shouldLoad) {
         auto ok = co_await QtConcurrent::run([this]() -> bool {
+            const std::lock_guard<std::mutex> modelLock(model_ctx_mutex_);
             LOG_DEBUG_N << "Loading model instance: " << modelId();
             const ScopedTimer timer;
             try {
@@ -713,6 +779,14 @@ QCoro::Task<bool> ModelInstance::load() noexcept
                 return false;
             }
         });
+
+        if (!ok) {
+            const std::lock_guard<std::mutex> lock(load_state_mutex_);
+            if (loaded_count_ > 0) {
+                --loaded_count_;
+            }
+        }
+
         co_return ok;
     }
 
@@ -721,11 +795,22 @@ QCoro::Task<bool> ModelInstance::load() noexcept
 
 QCoro::Task<bool> ModelInstance::unload() noexcept
 {
-    LOG_TRACE_N << "Unloading model instance: " << modelId()
-                << ". current load count=" << loaded_count_;
+    int currentCount = 0;
+    bool shouldUnload = false;
+    {
+        const std::lock_guard<std::mutex> lock(load_state_mutex_);
+        currentCount = loaded_count_;
+        if (loaded_count_ <= 0) {
+            LOG_WARN_N << "Unload requested with zero load count for " << modelId();
+            co_return false;
+        }
+        shouldUnload = (--loaded_count_ == 0);
+    }
 
-    assert(loaded_count_ > 0);
-    if (--loaded_count_ ==0) {
+    LOG_TRACE_N << "Unloading model instance: " << modelId()
+                << ". current load count=" << currentCount;
+
+    if (shouldUnload) {
         co_return co_await  QtConcurrent::run([this]() -> bool {
             return unloadNow();
         });
@@ -740,7 +825,9 @@ bool ModelInstance::unloadNow() noexcept
 
     ScopedTimer timer;
     try {
+        const std::lock_guard<std::mutex> modelLock(model_ctx_mutex_);
         model_ctx_.reset();
+        const std::lock_guard<std::mutex> stateLock(load_state_mutex_);
         loaded_count_ = 0;
     } catch (const std::exception &e) {
         LOG_ERROR_N << "Exception during model context reset: " << e.what();

@@ -5,6 +5,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QFileInfo>
+#include <QSaveFile>
 
 
 #include "ChatMessagesModel.h"
@@ -12,6 +14,37 @@
 #include "logging.h"
 
 using namespace std;
+
+namespace {
+
+ChatMessagesModel::Format resolveFormat(ChatMessagesModel::Format format, const QString& path)
+{
+    if (format != ChatMessagesModel::Format::Auto) {
+        return format;
+    }
+
+    const QFileInfo fi(path);
+    return fi.suffix().compare("json", Qt::CaseInsensitive) == 0
+               ? ChatMessagesModel::Format::JSON
+               : ChatMessagesModel::Format::Markdown;
+}
+
+bool saveTextFile(const QString& path, const QByteArray& bytes)
+{
+    QSaveFile out(path);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+
+    if (out.write(bytes) != bytes.size()) {
+        out.cancelWriting();
+        return false;
+    }
+
+    return out.commit();
+}
+
+} // namespace
 
 
 ChatMessagesModel::ChatMessagesModel(QObject *parent)
@@ -67,12 +100,71 @@ void ChatMessagesModel::copyAllToClipboard(Format format)
 
 void ChatMessagesModel::saveMessage(int index, Format format, const QUrl &path)
 {
-    
+    const QString localPath = path.toLocalFile();
+    if (localPath.isEmpty()) {
+        LOG_WARN_N << "saveMessage called without a local file path.";
+        return;
+    }
+
+    if (index < 0 || static_cast<size_t>(index) >= messages_.size() || !messages_[size_t(index)]) {
+        LOG_WARN_N << "saveMessage called with invalid index " << index;
+        return;
+    }
+
+    const auto chosenFormat = resolveFormat(format, localPath);
+    const ChatMessage& msg = *messages_[size_t(index)];
+    QByteArray payload;
+
+    if (chosenFormat == Format::Markdown) {
+        payload = formatMessageAsMarkdown(msg).toUtf8();
+    } else {
+        payload = QJsonDocument(formatMessageAsJSON(msg)).toJson(QJsonDocument::Indented);
+    }
+
+    if (!saveTextFile(localPath, payload)) {
+        LOG_ERROR_N << "Failed to save message to " << localPath;
+    }
 }
 
 void ChatMessagesModel::saveConversation(int index, Format format, const QUrl &path)
 {
-    
+    Q_UNUSED(index);
+
+    const QString localPath = path.toLocalFile();
+    if (localPath.isEmpty()) {
+        LOG_WARN_N << "saveConversation called without a local file path.";
+        return;
+    }
+
+    const auto chosenFormat = resolveFormat(format, localPath);
+    QByteArray payload;
+
+    if (chosenFormat == Format::Markdown) {
+        QString all;
+        for (const auto *msg : messages_) {
+            if (!msg) {
+                continue;
+            }
+            all += formatMessageAsMarkdown(*msg);
+            all += "\n\n";
+        }
+        payload = all.trimmed().toUtf8();
+    } else {
+        QJsonArray messagesArray;
+        for (const auto *msg : messages_) {
+            if (!msg) {
+                continue;
+            }
+            messagesArray.append(formatMessageAsJSON(*msg));
+        }
+        QJsonObject root;
+        root.insert(QStringLiteral("messages"), messagesArray);
+        payload = QJsonDocument(root).toJson(QJsonDocument::Indented);
+    }
+
+    if (!saveTextFile(localPath, payload)) {
+        LOG_ERROR_N << "Failed to save conversation to " << localPath;
+    }
 }
 
 

@@ -11,6 +11,7 @@
 #include <QCollator>
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QTextStream>
 
 #include "AppEngine.h"
 #include "AudioRecorder.h"
@@ -139,14 +140,23 @@ static bool writeWavFromRawPcm16(
 
     QDataStream s(&out);
     s.setByteOrder(QDataStream::LittleEndian);
+    auto writeChecked = [&out](const char *data, qint64 size) {
+        return out.write(data, size) == size;
+    };
 
     // RIFF header
-    out.write("RIFF", 4);
+    if (!writeChecked("RIFF", 4)) {
+        return false;
+    }
     s << quint32(36 + dataSize);          // file size minus 8
-    out.write("WAVE", 4);
+    if (!writeChecked("WAVE", 4)) {
+        return false;
+    }
 
     // fmt chunk
-    out.write("fmt ", 4);
+    if (!writeChecked("fmt ", 4)) {
+        return false;
+    }
     s << quint32(16);                     // PCM fmt chunk size
     s << quint16(1);                      // audio format 1 = PCM
     s << quint16(channels);
@@ -156,9 +166,17 @@ static bool writeWavFromRawPcm16(
     s << quint16(bitsPerSample);
 
     // data chunk
-    out.write("data", 4);
+    if (!writeChecked("data", 4)) {
+        return false;
+    }
     s << quint32(dataSize);
-    out.write(pcm);
+    if (out.write(pcm) != pcm.size()) {
+        return false;
+    }
+
+    if (s.status() != QDataStream::Ok) {
+        return false;
+    }
 
     return out.flush();
 }
@@ -171,6 +189,15 @@ constexpr bool is_one_of(T value, std::initializer_list<T> list)
         if (v == value)
             return true;
     return false;
+}
+
+QAudioFormat whisperPcm16Mono16kFormat()
+{
+    QAudioFormat fmt;
+    fmt.setSampleRate(16000);
+    fmt.setChannelCount(1);
+    fmt.setSampleFormat(QAudioFormat::Int16);
+    return fmt;
 }
 
 } // anon ns
@@ -475,13 +502,27 @@ void AppEngine::onModelChangedState(const Model *model, ModelState state)
 void AppEngine::saveTranscriptToFile(const QUrl &path)
 {
     QString filename = path.toLocalFile();
+    if (filename.isEmpty()) {
+        failed(tr("No output path selected."));
+        return;
+    }
 
     QFile f(filename);
-    if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QTextStream out(&f);
-        out << current_recorded_text_;
-        f.close();
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        failed(tr("Failed to open transcript file for writing: %1").arg(filename));
+        return;
     }
+
+    QTextStream out(&f);
+    out << current_recorded_text_;
+    out.flush();
+
+    if (out.status() != QTextStream::Ok || !f.flush()) {
+        failed(tr("Failed to write transcript to: %1").arg(filename));
+        return;
+    }
+
+    f.close();
 }
 
 void AppEngine::reset()
@@ -529,7 +570,34 @@ void AppEngine::copyTextToClipboard(const QString &text)
 
 QString AppEngine::aboutText() const
 {
-     return tr(R"(**QVocalWriter** is a cross-platform, privacy-focused application for working with speech and text.
+    auto normalizeEngineVersion = [](QString value, const QString &engineName) {
+        value = value.trimmed();
+        const auto withVersion = engineName + " version ";
+        const auto plain = engineName + " ";
+
+        if (value.startsWith(withVersion, Qt::CaseInsensitive)) {
+            return value.mid(withVersion.size()).trimmed();
+        }
+        if (value.startsWith(plain, Qt::CaseInsensitive)) {
+            return value.mid(plain.size()).trimmed();
+        }
+        return value;
+    };
+
+    QString whisper_version = tr("unavailable");
+    QString llama_version = tr("unavailable");
+    try {
+        whisper_version = normalizeEngineVersion(
+            QString::fromStdString(ModelMgr::instance().whisperEngine().version()),
+            QStringLiteral("whisper.cpp"));
+        llama_version = normalizeEngineVersion(
+            QString::fromStdString(ModelMgr::instance().llamaEngine().version()),
+            QStringLiteral("llama.cpp"));
+    } catch (...) {
+        LOG_WARN_N << "Failed to resolve engine versions for About dialog.";
+    }
+
+    return tr(R"(**QVocalWriter** is a cross-platform, privacy-focused application for working with speech and text.
 It combines **transcription**, **translation**, and **assistant-based chat** in a modular design
 focused on long-form work and local models.
 
@@ -574,6 +642,8 @@ Interact with language models for drafting, rewriting, research and exploration.
 ## Technical Information
 
 - Built with **Qt 6 (C++ / QML)**
+- **whisper.cpp**: %3
+- **llama.cpp**: %4
 - Cross-platform: Linux, Windows, macOS
 - Typical memory usage: < 100 MB before loading models
 - License: GPL3
@@ -582,7 +652,7 @@ Interact with language models for drafting, rewriting, research and exploration.
 
 Developed by **Jarle Aase**, [The Last Viking LTD](https://lastviking.eu/)
 © 2025, 2026
-)").arg(APP_VERSION).arg(qVersion());
+)").arg(APP_VERSION).arg(qVersion()).arg(whisper_version, llama_version);
 
 }
 
@@ -611,14 +681,20 @@ void AppEngine::saveAudioToFile(const QUrl &path)
     }
 
     const auto local_path = path.toLocalFile();
+    if (local_path.isEmpty()) {
+        failed(tr("No output path selected."));
+        return;
+    }
     LOG_INFO_N << "Saving recorded audio to: " << local_path;
 
-    writeWavFromRawPcm16(
+    if (!writeWavFromRawPcm16(
         pcm_file_path_,
-        path.toLocalFile(),
+        local_path,
         16000,
         1
-    );
+    )) {
+        failed(tr("Failed to save WAV file to: %1").arg(local_path));
+    }
 }
 
 AppEngine::AppEngine() {
@@ -1006,13 +1082,17 @@ QCoro::Task<void> AppEngine::startPrepareForTranslation()
         co_return;
     }
     assert(mi);
-    translate_model_ = co_await prepareGeneralModel(
+    if (translate_model_ = co_await prepareGeneralModel(
         "translation-model",
         *mi,
         true // Load it
-        );
-
-    setState(State::Ready);
+        ); translate_model_) {
+        setState(State::Ready);
+    } else {
+        assert(state() == State::Error);
+        LOG_WARN_N << "Failed to prepare translation model: "
+                   << translation_models_.currentId();
+    }
     co_return;
 }
 
@@ -1187,9 +1267,15 @@ QCoro::Task<void> AppEngine::startPrepareForTranscribeFile()
     // make sure pcm_file_path_ exists and is empty.
     {
         QFile f(pcm_file_path_);
-        if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-            f.close();
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            failed(tr("Cannot prepare temporary PCM file: %1").arg(pcm_file_path_));
+            co_return;
         }
+        if (!f.flush()) {
+            failed(tr("Failed to reset temporary PCM file: %1").arg(pcm_file_path_));
+            co_return;
+        }
+        f.close();
     }
 
     co_await prepareTranscriptFinal();
@@ -1249,11 +1335,16 @@ QCoro::Task<void> AppEngine::startTransribeFile(const QString &path)
     }
 
     QFile f(pcm_file_path_);
-    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        f.write(reinterpret_cast<const char*>(out.data()),
-                qint64(out.size() * sizeof(int16_t)));
-        f.close();
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        failed(tr("Cannot open temporary PCM file: %1").arg(pcm_file_path_));
+        co_return;
     }
+    const auto bytes = qint64(out.size() * sizeof(int16_t));
+    if (f.write(reinterpret_cast<const char*>(out.data()), bytes) != bytes || !f.flush()) {
+        failed(tr("Failed to write decoded PCM data to: %1").arg(pcm_file_path_));
+        co_return;
+    }
+    f.close();
 
     setStateText(tr("Transcribing audio file..."));
     co_await onRecordingDone();
@@ -1307,8 +1398,11 @@ QCoro::Task<shared_ptr<Transcriber>> AppEngine::prepareTranscriber(
     cfg->from_language = language;
     cfg->submit_filal_text = submitFilalText;
 
-    shared_ptr<TranscriberWhisper> transcriber = make_shared<
-        TranscriberWhisper>(name, std::move(cfg), chunk_queue_.get(), pcm_file_path_, recorder_->format());
+    const QAudioFormat transcriber_format =
+        recorder_ ? recorder_->format() : whisperPcm16Mono16kFormat();
+
+    shared_ptr<TranscriberWhisper> transcriber = make_shared<TranscriberWhisper>(
+        name, std::move(cfg), chunk_queue_.get(), pcm_file_path_, transcriber_format);
 
     // Unconnected partial text signal
 
@@ -1730,5 +1824,3 @@ void AppEngine::prepareLanguages()
 
     emit languagesChanged();
 }
-
-
