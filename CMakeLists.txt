@@ -32,6 +32,27 @@ if(QVW_GPU_BACKEND_UPPER STREQUAL "VULKAN")
       "Falling back to CPU-only backend (NONE).")
     set(QVW_GPU_BACKEND_EFFECTIVE "NONE")
   endif()
+elseif(QVW_GPU_BACKEND_UPPER STREQUAL "ROCM")
+  set(QVW_ROCM_AVAILABLE TRUE)
+  find_package(hip QUIET CONFIG)
+  find_package(rocblas QUIET CONFIG)
+  find_package(hipblas QUIET CONFIG)
+  find_program(QVW_HIPCC_EXECUTABLE NAMES hipcc)
+  find_library(QVW_ROCBLAS_LIBRARY NAMES rocblas)
+  find_library(QVW_HIPBLAS_LIBRARY NAMES hipblas)
+  if((NOT hip_FOUND AND NOT QVW_HIPCC_EXECUTABLE)
+     OR (NOT rocblas_FOUND AND NOT QVW_ROCBLAS_LIBRARY)
+     OR (NOT hipblas_FOUND AND NOT QVW_HIPBLAS_LIBRARY))
+    set(QVW_ROCM_AVAILABLE FALSE)
+  endif()
+
+  if(NOT QVW_ROCM_AVAILABLE)
+    message(WARNING
+      "QVW_GPU_BACKEND=ROCM requested, but required ROCm/HIP components were not found "
+      "(need HIP + rocBLAS + hipBLAS; detected via package config or system libraries). "
+      "Falling back to CPU-only backend (NONE).")
+    set(QVW_GPU_BACKEND_EFFECTIVE "NONE")
+  endif()
 endif()
 
 message(STATUS "QVW GPU backend requested: ${QVW_GPU_BACKEND_UPPER}, effective: ${QVW_GPU_BACKEND_EFFECTIVE}")

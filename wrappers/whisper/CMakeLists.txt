@@ -14,6 +14,7 @@ set(QVW_GPU_BACKEND "NONE" CACHE STRING "GPU backend for GGML: NONE, VULKAN/VULC
 set_property(CACHE QVW_GPU_BACKEND PROPERTY STRINGS NONE VULKAN VULCAN CUDA METAL ROCM)
 
 string(TOUPPER "${QVW_GPU_BACKEND}" QVW_GPU_BACKEND_UPPER)
+set(QVW_GPU_BACKEND_EFFECTIVE "${QVW_GPU_BACKEND_UPPER}")
 
 set(QVW_GGML_CUDA OFF)
 set(QVW_GGML_HIP OFF)
@@ -31,12 +32,29 @@ elseif(QVW_GPU_BACKEND_UPPER STREQUAL "CUDA")
 elseif(QVW_GPU_BACKEND_UPPER STREQUAL "METAL")
   set(QVW_GGML_METAL ON)
 elseif(QVW_GPU_BACKEND_UPPER STREQUAL "ROCM")
-  set(QVW_GGML_HIP ON)
+  find_package(hip QUIET CONFIG)
+  find_package(rocblas QUIET CONFIG)
+  find_package(hipblas QUIET CONFIG)
+  find_program(QVW_HIPCC_EXECUTABLE NAMES hipcc)
+  find_library(QVW_ROCBLAS_LIBRARY NAMES rocblas)
+  find_library(QVW_HIPBLAS_LIBRARY NAMES hipblas)
+  if((NOT hip_FOUND AND NOT QVW_HIPCC_EXECUTABLE)
+     OR (NOT rocblas_FOUND AND NOT QVW_ROCBLAS_LIBRARY)
+     OR (NOT hipblas_FOUND AND NOT QVW_HIPBLAS_LIBRARY))
+    message(WARNING
+      "qvw_whisper_wrap: ROCM backend requested, but required ROCm/HIP components were not found "
+      "(need HIP + rocBLAS + hipBLAS). Falling back to CPU-only backend (NONE).")
+    set(QVW_GPU_BACKEND_EFFECTIVE "NONE")
+  endif()
+
+  if(QVW_GPU_BACKEND_EFFECTIVE STREQUAL "ROCM")
+    set(QVW_GGML_HIP ON)
+  endif()
 else()
   message(FATAL_ERROR "Invalid QVW_GPU_BACKEND='${QVW_GPU_BACKEND}'. Expected one of: NONE, VULKAN/VULCAN, CUDA, METAL, ROCM")
 endif()
 
-message(STATUS "qvw_whisper_wrap: QVW_GPU_BACKEND=${QVW_GPU_BACKEND_UPPER}")
+message(STATUS "qvw_whisper_wrap: QVW_GPU_BACKEND requested=${QVW_GPU_BACKEND_UPPER}, effective=${QVW_GPU_BACKEND_EFFECTIVE}")
 
 # ---- Fetch whisper privately (only inside wrapper build) ----
 FetchContent_Declare(
