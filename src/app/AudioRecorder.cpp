@@ -14,7 +14,7 @@ AudioRecorder::AudioRecorder(const QAudioDevice &device, QObject *parent)
     , format_(createWhisperFormat(device))
     , audioSource_(new QAudioSource(device_, format_, this))
     , ringBuffer_(make_unique<AudioRingBuffer>())
-    , captureDevice_(make_unique<AudioCaptureDevice>(ringBuffer_.get()))
+    , captureDevice_(make_unique<AudioCaptureDevice>(ringBuffer_.get(), format_.sampleRate()))
 {}
 
 void AudioRecorder::start()

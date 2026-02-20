@@ -5,11 +5,19 @@
 #include <deque>
 
 #include <QByteArray>
+#include <QtGlobal>
 
 class AudioRingBuffer
 {
 public:
-    using Chunk = QByteArray;
+    struct Chunk {
+        QByteArray pcm;
+        float rms_dbfs = -120.0F;
+        float peak = 0.0F;
+        qint64 capture_ts_ms = 0;
+        int sample_count = 0;
+        bool is_speech = false;
+    };
 
     void push(Chunk &&chunk)
     {

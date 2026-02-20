@@ -39,7 +39,7 @@ public:
 
 protected:
     bool createContextImpl() override;
-    void processChunk(std::span<const uint8_t> data, bool lastChunk) override;
+    void processChunk(std::span<const uint8_t> data, bool lastChunk, bool forceProcess) override;
     bool processRecording(std::span<const float> data) override;
     bool stopImpl() override;
 
@@ -60,8 +60,8 @@ private:
     // Audio parameters
     int sample_rate_ = 16000; // Hz
     int window_ms_ = 10000; // total buffer span, e.g. 10000 ms
-    float overlap_fraction_ = 0.30F; // 0.0 .. 0.9
     int min_ms_before_process_ = 200; // minimum audio before first Whisper call
+    int max_live_latency_ms_ = 1500; // fallback trigger during continuous speech
 
     // Derived / state
     std::vector<float> pcm_; // contiguous sliding window

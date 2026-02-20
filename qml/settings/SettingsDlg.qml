@@ -24,6 +24,10 @@ Dialog {
                 text: qsTr("General")
                 width: implicitWidth
             }
+            TabButton {
+                text: qsTr("Transcription")
+                width: implicitWidth
+            }
         }
 
         StackLayout {
@@ -38,11 +42,16 @@ Dialog {
                 id: generalTab
                 GeneralSettings {id: general}
             }
+            Item {
+                id: transcriptionTab
+                TranscribeSettings {id: transcribe}
+            }
         }
     }
 
     onAccepted: {
         general.commit()
+        transcribe.commit()
         close()
     }
 
@@ -50,4 +59,3 @@ Dialog {
         close()
     }
 }
-

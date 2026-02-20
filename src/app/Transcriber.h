@@ -35,7 +35,9 @@ public:
     const std::string& language() const noexcept;
 
 protected:
-    virtual void processChunk(std::span<const uint8_t> data, bool lastChunk = false) = 0;
+    virtual void processChunk(std::span<const uint8_t> data,
+                              bool lastChunk = false,
+                              bool forceProcess = false) = 0;
     virtual bool processRecording(std::span<const float> data) = 0;
 
 private:
@@ -48,5 +50,4 @@ private:
     QAudioFormat     format_;
     std::optional<QPromise<bool>> promise_;
 };
-
 

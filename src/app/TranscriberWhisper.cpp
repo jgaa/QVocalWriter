@@ -1,6 +1,7 @@
 #include <QDir>
 #include <QNetworkReply>
 #include <QEventLoop>
+#include <QSettings>
 
 //#include <whisper.h>
 #include <string_view>
@@ -85,9 +86,15 @@ void TranscriberWhisper::startSession()
 TranscriberWhisper::TranscriberWhisper(std::string name, std::unique_ptr<Config> &&cfg, chunk_queue_t *queue, const QString &filePath, QAudioFormat format)
     : Transcriber(std::move(name), std::move(cfg), queue, filePath, format)
 {
+    QSettings settings;
+    min_ms_before_process_ = std::max(0, settings.value("transcribe.live.min_ms_before_process", 200).toInt());
+    max_live_latency_ms_ = std::max(200, settings.value("transcribe.live.max_latency_ms", 1500).toInt());
+
     LOG_TRACE_EX(*this) << "TranscriberWhisper: constructor called for model "
                 << modelName()
-                << " with language '" << language() << "'";
+                << " with language '" << language()
+                << "', min_ms_before_process=" << min_ms_before_process_
+                << ", max_live_latency_ms=" << max_live_latency_ms_;
 }
 
 TranscriberWhisper::~TranscriberWhisper()
@@ -116,7 +123,7 @@ bool TranscriberWhisper::createContextImpl()
     return true;
 }
 
-void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastChunk)
+void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastChunk, bool forceProcess)
 {
     if (isCancelled()) {
         LOG_WARN_EX(*this) << "Called when cancelled. Ignoring.";
@@ -126,7 +133,8 @@ void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastCh
     assert(session_ctx_ != nullptr);
 
     LOG_TRACE_EX(*this) << "TranscriberWhisper::processChunk #" << ++chunks_ << " called with data size ="
-                << data.size() << " lastChunk =" << lastChunk;
+                << data.size() << " lastChunk =" << lastChunk
+                << " forceProcess=" << forceProcess;
 
     // --- 1) Derive window size in samples ---------------------------------
     const int windowSamples = (window_ms_ * sample_rate_) / 1000;
@@ -191,22 +199,20 @@ void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastCh
     const int64_t minSamplesBeforeProcess =
         (static_cast<int64_t>(min_ms_before_process_) * sample_rate_) / 1000;
 
-    // Overlap fraction controls how often we call Whisper (step size)
-    const float overlapClamped = std::clamp(overlap_fraction_, 0.0F, 0.9f);
-    const int64_t stepSamples =
-        static_cast<int64_t>(windowSamples * (1.0F - overlapClamped));
+    const int64_t maxLatencySamples =
+        (static_cast<int64_t>(max_live_latency_ms_) * sample_rate_) / 1000;
 
     bool shouldRun = false;
 
-    if (lastChunk) {
+    if (lastChunk || forceProcess) {
         // On final call: always flush pending audio
-        // (even if we didn’t reach the 'step' yet)
+        // (even if we didn’t reach the live-latency threshold yet)
         shouldRun = true;
     } else {
-        // Not the last chunk: enforce minMs + step
+        // Not a forced/final call: enforce minMs + fallback max latency.
         if (total_samples_ >= minSamplesBeforeProcess) {
             const int64_t sinceLastProcessed = total_samples_ - last_processed_sample_;
-            if (sinceLastProcessed >= stepSamples) {
+            if (sinceLastProcessed >= maxLatencySamples) {
                 shouldRun = true;
             }
         }
@@ -353,4 +359,3 @@ bool TranscriberWhisper::stopImpl()
     // Nothing special to do here for Whisper
     return true;
 }
-

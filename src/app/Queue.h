@@ -58,6 +58,11 @@ struct FileChunk
 {
     qint64  offset{};   // byte offset in file
     qsizetype size{};   // length of data segment
+    bool is_speech = false;
+    float rms_dbfs = -120.0F;
+    float peak = 0.0F;
+    qint64 capture_ts_ms = 0;
+    int sample_count = 0;
 };
 
 using chunk_queue_t = Queue<FileChunk>;

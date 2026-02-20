@@ -18,7 +18,7 @@ ScrollView {
         settings.setValue("logging/prune", prune.checked ? "true" : "false")
         settings.setValue("models/path", modelPath.text)
         settings.setValue("logging/trivial.llm.forward", fwdModelMessages.checked ? "true" : "false")
-        settings.setValue("models/send.datetime", sendDateTimeToModels.checked ? "true" : "false")
+
         settings.sync()
     }
 
@@ -113,13 +113,6 @@ ScrollView {
                 text: settings.value("models/path", "")
             }
         }
-
-        // Item {}
-        // CheckBox {
-        //     id: sendDateTimeToModels
-        //     text: qsTr("Send date and time to models")
-        //     checked: settings.value("models/send.datetime") === "true"
-        // }
 
         Item {
             Layout.fillHeight: true

@@ -196,6 +196,7 @@ qt_add_qml_module(${PROJECT_NAME}
           qml/common.js
           qml/settings/GeneralSettings.qml
           qml/settings/SettingsDlg.qml
+          qml/settings/TranscribeSettings.qml
           qml/MessagesView.qml
       SOURCES
           include/qvw/EngineBase.h

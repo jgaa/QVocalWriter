@@ -55,15 +55,25 @@ void AudioFileWriter::run()
             break; // stopped or no more data
         }
 
-        LOG_TRACE_N << "Writing #" << ++segment << " offset=" << currentOffset << " size=" << chunk.size();
+        LOG_TRACE_N << "Writing #" << ++segment << " offset=" << currentOffset
+                    << " size=" << chunk.pcm.size()
+                    << " speech=" << chunk.is_speech;
 
-        const qint64 written = file_.write(chunk);
+        const qint64 written = file_.write(chunk.pcm);
         if (written <= 0) {
             LOG_ERROR_N << "AudioFileWriter: failed to write to file";
             break;
         }
 
-        FileChunk fc{ currentOffset, static_cast<qsizetype>(written) };
+        FileChunk fc{
+            .offset = currentOffset,
+            .size = static_cast<qsizetype>(written),
+            .is_speech = chunk.is_speech,
+            .rms_dbfs = chunk.rms_dbfs,
+            .peak = chunk.peak,
+            .capture_ts_ms = chunk.capture_ts_ms,
+            .sample_count = chunk.sample_count
+        };
         currentOffset += written;
         chunkQueue_->push(std::move(fc));
     }
