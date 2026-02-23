@@ -25,5 +25,26 @@ function(qvw_fetch name)
     )
   endif()
 
+  # Prevent third-party install() rules from polluting the top-level
+  # install tree. We only want QVocalWriter artifacts installed.
+  set(_qvw_prev_skip_install_rules "${CMAKE_SKIP_INSTALL_RULES}")
+  set(CMAKE_SKIP_INSTALL_RULES ON)
   FetchContent_MakeAvailable(${name})
+  if(DEFINED _qvw_prev_skip_install_rules)
+    set(CMAKE_SKIP_INSTALL_RULES "${_qvw_prev_skip_install_rules}")
+  else()
+    unset(CMAKE_SKIP_INSTALL_RULES)
+  endif()
+
+  # Top-level cmake_install.cmake still includes subdirectory install scripts.
+  # When install rules are skipped for dependencies, ensure an empty script
+  # exists so include() succeeds and installs nothing from that dependency.
+  set(_qvw_dep_bin_dir "${${name}_BINARY_DIR}")
+  if(_qvw_dep_bin_dir)
+    set(_qvw_dep_install_script "${_qvw_dep_bin_dir}/cmake_install.cmake")
+    if(NOT EXISTS "${_qvw_dep_install_script}")
+      file(MAKE_DIRECTORY "${_qvw_dep_bin_dir}")
+      file(WRITE "${_qvw_dep_install_script}" "# intentionally empty\n")
+    endif()
+  endif()
 endfunction()
