@@ -253,7 +253,10 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
 target_compile_options(${PROJECT_NAME} PRIVATE -frtti)
 
-add_dependencies(${PROJECT_NAME} qvw_whisper_wrap_ep)
+add_dependencies(${PROJECT_NAME}
+  qvw_whisper_wrap_ep
+  qvw_llama_wrap_ep
+)
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
@@ -277,4 +280,10 @@ include(GNUInstallDirs)
 
 install(TARGETS ${PROJECT_NAME}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+install(FILES
+  "${QVW_WHISPER_WRAP_LIB}"
+  "${QVW_LLAMA_WRAP_LIB}"
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
