@@ -30,7 +30,6 @@ ScrollView {
         settings.setValue("transcribe.vad.frame_ms", intOrDefault(vadFrameMs.text, 20))
         settings.setValue("transcribe.vad.preroll_ms", intOrDefault(vadPrerollMs.text, 120))
         settings.setValue("transcribe.vad.postroll_ms", intOrDefault(vadPostrollMs.text, 180))
-        settings.setValue("transcribe.live.min_ms_before_process", intOrDefault(liveMinMsBeforeProcess.text, 200))
         settings.setValue("transcribe.live.max_latency_ms", intOrDefault(liveMaxLatencyMs.text, 1500))
         settings.setValue("transcribe.post.skip_silence", postSkipSilence.checked)
         settings.sync()
@@ -101,13 +100,6 @@ ScrollView {
             id: vadPostrollMs
             Layout.fillWidth: true
             text: settings.value("transcribe.vad.postroll_ms", 180).toString()
-        }
-
-        Label { text: qsTr("Live min process (ms)")}
-        TextField {
-            id: liveMinMsBeforeProcess
-            Layout.fillWidth: true
-            text: settings.value("transcribe.live.min_ms_before_process", 200).toString()
         }
 
         Label { text: qsTr("Live max latency (ms)")}
