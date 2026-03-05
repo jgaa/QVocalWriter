@@ -47,6 +47,8 @@ private:
 
     int sample_rate_ = 16000; // Hz
     int max_live_latency_ms_ = 1500; // fallback trigger during continuous speech
+    int min_live_submit_ms_ = 220; // ignore very short phrase fragments on forced flush
+    float min_live_rms_dbfs_ = -52.0F; // drop near-silent chunks that slip past VAD
 
     // Pending voiced PCM that has not yet been submitted to Whisper.
     std::vector<float> pending_pcm_;

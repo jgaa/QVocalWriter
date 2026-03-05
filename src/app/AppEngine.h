@@ -14,6 +14,10 @@
 #include "RewriteStyleModel.h"
 #include "ModelState.h"
 
+#ifndef QVW_GPU_BACKEND_AVAILABLE
+#define QVW_GPU_BACKEND_AVAILABLE 0
+#endif
+
 class AudioRecorder;
 class AudioFileWriter;
 class Transcriber;         // base class
@@ -59,6 +63,7 @@ class AppEngine : public QObject
     Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged)
     Q_PROPERTY(TranscribeSource transcribeSource READ transcribeSource WRITE setTranscribeSource NOTIFY stateFlagsChanged)
     Q_PROPERTY(QString transcribeVocabulary READ transcribeVocabulary WRITE setTranscribeVocabulary NOTIFY stateFlagsChanged)
+    Q_PROPERTY(bool gpuBackendAvailable READ gpuBackendAvailable CONSTANT)
 
 public:
     enum class State {
@@ -162,6 +167,7 @@ public:
     }
     QString transcribeVocabulary() const { return transcribe_vocabulary_; }
     void setTranscribeVocabulary(const QString& vocab);
+    bool gpuBackendAvailable() const noexcept { return QVW_GPU_BACKEND_AVAILABLE != 0; }
 
     int  languageIndex() const { return language_index_; }
     QString transcribeModelName() const { return transcribe_model_name_;}
@@ -302,4 +308,3 @@ private:
 std::ostream& operator << (std::ostream& os, AppEngine::State state);
 std::ostream& operator << (std::ostream& os, AppEngine::Mode mode);
 std::ostream& operator << (std::ostream& os, AppEngine::TranscribeSource source);
-

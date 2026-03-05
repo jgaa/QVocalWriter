@@ -94,17 +94,22 @@ Item {
                 anchors.fill: parent
                 spacing: 8
 
-                TextArea {
-                    id: promptEdit
+                ScrollView {
                     Layout.fillWidth: true
-                    implicitHeight: 90
-                    wrapMode: TextEdit.Wrap
-                    placeholderText: qsTr("Write your prompt…  (Ctrl+Enter to send)")
+                    Layout.preferredHeight: 90
+                    ScrollBar.vertical.policy: ScrollBar.AlwaysOn
+                    ScrollBar.horizontal.policy: ScrollBar.AsNeeded
 
-                    Keys.onPressed: (event) => {
-                        if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Return) {
-                            sendButton.clicked()
-                            event.accepted = true
+                    TextArea {
+                        id: promptEdit
+                        wrapMode: TextEdit.Wrap
+                        placeholderText: qsTr("Write your prompt…  (Ctrl+Enter to send)")
+
+                        Keys.onPressed: (event) => {
+                            if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Return) {
+                                sendButton.clicked()
+                                event.accepted = true
+                            }
                         }
                     }
                 }

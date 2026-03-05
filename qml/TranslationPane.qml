@@ -168,14 +168,19 @@ Item {
                     }
                 }
 
-                TextArea {
-                    id: outputEdit
+                ScrollView {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    readOnly: true
-                    wrapMode: TextEdit.Wrap
-                    selectByMouse: true
-                    placeholderText: qsTr("Translation will appear here…")
+                    ScrollBar.vertical.policy: ScrollBar.AlwaysOn
+                    ScrollBar.horizontal.policy: ScrollBar.AsNeeded
+
+                    TextArea {
+                        id: outputEdit
+                        readOnly: true
+                        wrapMode: TextEdit.Wrap
+                        selectByMouse: true
+                        placeholderText: qsTr("Translation will appear here…")
+                    }
                 }
             }
         }
@@ -189,17 +194,22 @@ Item {
                 anchors.fill: parent
                 spacing: 8
 
-                TextArea {
-                    id: inputEdit
+                ScrollView {
                     Layout.fillWidth: true
-                    implicitHeight: 110
-                    wrapMode: TextEdit.Wrap
-                    placeholderText: qsTr("Paste or write text…  (Ctrl+Enter to translate)")
+                    Layout.preferredHeight: 110
+                    ScrollBar.vertical.policy: ScrollBar.AlwaysOn
+                    ScrollBar.horizontal.policy: ScrollBar.AsNeeded
 
-                    Keys.onPressed: (event) => {
-                        if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Return) {
-                            translateButton.clicked()
-                            event.accepted = true
+                    TextArea {
+                        id: inputEdit
+                        wrapMode: TextEdit.Wrap
+                        placeholderText: qsTr("Paste or write text…  (Ctrl+Enter to translate)")
+
+                        Keys.onPressed: (event) => {
+                            if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Return) {
+                                translateButton.clicked()
+                                event.accepted = true
+                            }
                         }
                     }
                 }

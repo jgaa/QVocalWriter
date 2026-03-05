@@ -57,6 +57,11 @@ endif()
 
 message(STATUS "QVW GPU backend requested: ${QVW_GPU_BACKEND_UPPER}, effective: ${QVW_GPU_BACKEND_EFFECTIVE}")
 
+set(QVW_GPU_BACKEND_AVAILABLE 0)
+if(NOT QVW_GPU_BACKEND_EFFECTIVE STREQUAL "NONE")
+  set(QVW_GPU_BACKEND_AVAILABLE 1)
+endif()
+
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 set(QCORO_WITH_QTDBUS  OFF CACHE BOOL "" FORCE)
 set(QCORO_WITH_QTNETWORK ON CACHE BOOL "" FORCE)
@@ -252,6 +257,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 )
 
 target_compile_options(${PROJECT_NAME} PRIVATE -frtti)
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    QVW_GPU_BACKEND_AVAILABLE=${QVW_GPU_BACKEND_AVAILABLE}
+)
 
 add_dependencies(${PROJECT_NAME}
   qvw_whisper_wrap_ep

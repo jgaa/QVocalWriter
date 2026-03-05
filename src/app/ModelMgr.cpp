@@ -23,6 +23,10 @@
 #include "ModelMgr.h"
 #include "ScopedTimer.h"
 
+#ifndef QVW_GPU_BACKEND_AVAILABLE
+#define QVW_GPU_BACKEND_AVAILABLE 0
+#endif
+
 
 using namespace std;
 
@@ -860,7 +864,11 @@ bool ModelInstance::loadWhisper()
 
     auto& wengine = ModelMgr::instance().whisperEngine();
     const filesystem::path path = full_path_.toStdString();
+    const bool force_cpu = QSettings{}.value("models/disable_gpu", false).toBool();
     qvw::WhisperEngineLoadParams params;
+    params.use_gpu = (QVW_GPU_BACKEND_AVAILABLE != 0) && !force_cpu;
+    params.flash_attn = false;
+    params.gpu_device = 0;
     ScopedTimer timer;
     LOG_DEBUG_N << "Loading Whisper model \"" << modelId() << "\" from path: " << full_path_;
     model_ctx_ = wengine.loadWhisper(modelId().toStdString(), path, params);
@@ -878,7 +886,9 @@ bool ModelInstance::loadLlama()
 {
     auto& llama_engine = ModelMgr::instance().llamaEngine();
     const filesystem::path path = full_path_.toStdString();
+    const bool force_cpu = QSettings{}.value("models/disable_gpu", false).toBool();
     qvw::LlamaEngineLoadParams params;
+    params.n_gpu_layers = ((QVW_GPU_BACKEND_AVAILABLE != 0) && !force_cpu) ? 999 : 0;
     ScopedTimer timer;
     LOG_DEBUG_N << "Loading Llama model \"" << modelId() << "\" from path: " << full_path_;
     model_ctx_ = llama_engine.loadLlama(modelId().toStdString(), path, params);

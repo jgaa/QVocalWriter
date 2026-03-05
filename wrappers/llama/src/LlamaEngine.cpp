@@ -270,8 +270,7 @@ public:
         LOG_DEBUG_N << "Loading Llama model " << modelId << " from " << modelPath;
 
         auto mparams = llama_model_default_params();
-        // Keep wrapper CPU-only by default; if you later enable GPU variants, map params here.
-        // mparams.n_gpu_layers = params.n_gpu_layers;
+        mparams.n_gpu_layers = params.n_gpu_layers;
 
         llama_model * model = llama_model_load_from_file(modelPath.c_str(), mparams);
         if (!model) {

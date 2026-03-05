@@ -3,6 +3,9 @@
 #include <QEventLoop>
 #include <QSettings>
 
+#include <algorithm>
+#include <cmath>
+
 #include "TranscriberWhisper.h"
 #include "ScopedTimer.h"
 #include "logging.h"
@@ -21,11 +24,15 @@ TranscriberWhisper::TranscriberWhisper(std::string name, std::unique_ptr<Config>
 {
     QSettings settings;
     max_live_latency_ms_ = std::max(200, settings.value("transcribe.live.max_latency_ms", 1500).toInt());
+    min_live_submit_ms_ = std::max(50, settings.value("transcribe.live.min_submit_ms", 220).toInt());
+    min_live_rms_dbfs_ = std::clamp(settings.value("transcribe.live.min_rms_dbfs", -52.0).toFloat(), -90.0F, -20.0F);
 
     LOG_TRACE_EX(*this) << "TranscriberWhisper: constructor called for model "
                 << modelName()
                 << " with language '" << language()
-                << "', max_live_latency_ms=" << max_live_latency_ms_;
+                << "', max_live_latency_ms=" << max_live_latency_ms_
+                << ", min_live_submit_ms=" << min_live_submit_ms_
+                << ", min_live_rms_dbfs=" << min_live_rms_dbfs_;
 }
 
 TranscriberWhisper::~TranscriberWhisper()
@@ -102,6 +109,31 @@ void TranscriberWhisper::processChunk(std::span<const uint8_t> data, bool lastCh
 
     if (!shouldRun)
         return;
+
+    const int64_t pending_duration_ms =
+        (pending_samples_ * 1000) / std::max(1, sample_rate_);
+
+    if (forceProcess && !lastChunk && pending_duration_ms < min_live_submit_ms_) {
+        LOG_TRACE_EX(*this) << "Dropping short forced chunk: "
+                            << pending_duration_ms << "ms < " << min_live_submit_ms_ << "ms";
+        pending_pcm_.clear();
+        pending_samples_ = 0;
+        return;
+    }
+
+    double sum_square = 0.0;
+    for (const float sample : pending_pcm_) {
+        sum_square += static_cast<double>(sample) * static_cast<double>(sample);
+    }
+    const double rms = std::sqrt(sum_square / static_cast<double>(pending_pcm_.size()));
+    const float rms_dbfs = static_cast<float>(20.0 * std::log10(std::max(rms, 1e-6)));
+    if (forceProcess && !lastChunk && rms_dbfs < min_live_rms_dbfs_) {
+        LOG_TRACE_EX(*this) << "Dropping near-silent forced chunk: rms_dbfs="
+                            << rms_dbfs << " < " << min_live_rms_dbfs_;
+        pending_pcm_.clear();
+        pending_samples_ = 0;
+        return;
+    }
 
     // --- 4) Prepare Whisper parameters -----------------------------------
 

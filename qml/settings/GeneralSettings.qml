@@ -17,6 +17,7 @@ ScrollView {
         settings.setValue("logging/applevel", logLevelApp.currentIndex.toString())
         settings.setValue("logging/prune", prune.checked ? "true" : "false")
         settings.setValue("models/path", modelPath.text)
+        settings.setValue("models/disable_gpu", disableGpu.checked)
         settings.setValue("logging/trivial.llm.forward", fwdModelMessages.checked ? "true" : "false")
 
         settings.sync()
@@ -112,6 +113,14 @@ ScrollView {
                 color: palette.text
                 text: settings.value("models/path", "")
             }
+        }
+
+        Item {}
+        CheckBox {
+            id: disableGpu
+            visible: appEngine.gpuBackendAvailable
+            text: qsTr("Disable GPU for model inference (CPU only)")
+            checked: settings.value("models/disable_gpu", false)
         }
 
         Item {
