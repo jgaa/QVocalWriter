@@ -81,6 +81,7 @@ Control {
                     required property string id
                     required property int sizeMB
                     required property bool downloaded
+                    required property string releaseYearMonth
 
                     // Simple filtering
                     visible: {
@@ -125,7 +126,14 @@ Control {
                                 }
 
                                 Label {
-                                    text: sizeMB > 0 ? (sizeMB + " MB") : ""
+                                    text: {
+                                        const details = []
+                                        if (releaseYearMonth.length > 0)
+                                            details.push(releaseYearMonth)
+                                        if (sizeMB > 0)
+                                            details.push(sizeMB + " MB")
+                                        return details.join("  ·  ")
+                                    }
                                     opacity: 0.7
                                     font.pixelSize: 12
                                 }

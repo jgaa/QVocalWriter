@@ -21,7 +21,10 @@ public:
         Name = Qt::UserRole + 1,
         Id,
         SizeMB,
-        Downloaded
+        Downloaded,
+        ReleaseYear,
+        ReleaseMonth,
+        ReleaseYearMonth
     };
 
     struct ModelEntry {

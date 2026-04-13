@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 
-project(QVocalWriter VERSION 0.1.0 LANGUAGES CXX)
+project(QVocalWriter VERSION 0.2.0 LANGUAGES CXX)
 
 add_definitions(-DAPP_VERSION=\"${CMAKE_PROJECT_VERSION}\")
 

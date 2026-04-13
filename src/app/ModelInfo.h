@@ -77,6 +77,8 @@ struct ModelInfo {
     std::string_view sha;
     uint32_t capabilities{};
     std::string_view download_url; // If it ends with '/', the file name is appended for download
+    uint16_t release_year{};
+    uint8_t release_month{};
 };
 
 enum class ModelKind {

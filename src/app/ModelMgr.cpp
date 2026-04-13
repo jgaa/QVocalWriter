@@ -59,14 +59,14 @@ constexpr auto all_whisper_models = std::to_array<mi_t>({
     {"medium-en", "medium.en-q5_0", ModelInfo::PromptStyle::None, "ggml-medium.en-q5_0.bin", mi_t::Q5_0, 514,
      "bb3b5281bddd61605d6fc76bc5b92d8f20284c3b", mi_t::Transcribe,
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
-    {"large", "large-v3-q5_0", ModelInfo::PromptStyle::None, "ggml-large-v3-q5_0.bin", mi_t::Q5_0, 1100,
-     "e6e2ed78495d403bef4b7cff42ef4aaadcfea8de", mi_t::Transcribe,
-     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
+    {"large", "large-v3-q8_0", ModelInfo::PromptStyle::None, "whisper-large-v3-q8_0.bin", mi_t::Q8_0, 1656,
+     "37efc6b68f300ab717465685f7c3e175a66c11cf92bb3ab9912e86f4116c465e", mi_t::Transcribe,
+     "https://huggingface.co/lm-kit/whisper-ggml/resolve/main/"},
     {"turbo", "large-v3-turbo-q4_0", ModelInfo::PromptStyle::None, "ggml-large-v3-turbo-q5_0.bin", mi_t::Q5_0,
      547, "e050f7970618a659205450ad97eb95a18d69c9ee", mi_t::Transcribe,
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
-    {"turbo-best", "large-v3-turbo-q8_0", ModelInfo::PromptStyle::None, "ggml-large-v3-turbo-q5_0.bin",
-     mi_t::Q8_0, 547, "e050f7970618a659205450ad97eb95a18d69c9ee",
+    {"turbo-best", "large-v3-turbo-q8_0", ModelInfo::PromptStyle::None, "ggml-large-v3-turbo-q8_0.bin",
+     mi_t::Q8_0, 834, "01bf15bedffe9f39d65c1b6ff9b687ea91f59e0e",
      mi_t::Transcribe,
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"},
 });
@@ -80,9 +80,10 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         "Qwen2.5-3B-Instruct-Q4_K_M.gguf",
         mi_t::Q4_0,                                // map K-quants into your buckets as you prefer
         1930,
-        "",
+        "bc7a101f75529a60f7c469e0c2b17471ab0e176d1408751cfc4e3d855b44c332",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
-        "https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/"
+        "https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/",
+        2024, 9
     },
 
     // ---- Balanced (≈16–32 GB) ----
@@ -95,7 +96,8 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         4920,
         "854506123b68372492b8a99bb3a999594672b394791cf1153f8da5ffb5f1c59a",
         mi_t::Chat | mi_t::Rewrite,
-        "https://huggingface.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/"
+        "https://huggingface.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/",
+        2024, 7
     },
     {
         "balanced-translate",
@@ -106,7 +108,8 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         4200,
         "8a45e4e923f03f4106bcc375cb83fc383c2c570529acb2085c6468df10b50ad5",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
-        "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/"
+        "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/",
+        2024, 9
     },
 
     // ---- Pro (≈32–64 GB) ----
@@ -119,7 +122,8 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         13340,
         "c09c00735cd44c7aee7ef134f801e08cbdf130519d7b7bbb5f5d009b11a1f525",
         mi_t::Chat | mi_t::Rewrite,
-        "https://huggingface.co/bartowski/Mistral-Small-Instruct-2409-GGUF/resolve/main/"
+        "https://huggingface.co/bartowski/Mistral-Small-Instruct-2409-GGUF/resolve/main/",
+        2024, 9
     },
     {
         "pro-translate",
@@ -130,7 +134,8 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         8990,
         "d989c91de35f32c18bdb8bec96a4b9fff2c3e5bca066503c63a5ca54dd537a4b",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
-        "https://huggingface.co/bartowski/Qwen2.5-14B-Instruct-GGUF/resolve/main/"
+        "https://huggingface.co/bartowski/Qwen2.5-14B-Instruct-GGUF/resolve/main/",
+        2024, 9
     },
 
     // ---- Workstation (≈64–128 GB / strong GPU) ----
@@ -143,7 +148,8 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         42520,
         "273c07cdbbca671fa5e8fc091b7a012ace0e0354e04a54a2ed5cc645921c15bc",
         mi_t::Chat | mi_t::Rewrite,
-        "https://huggingface.co/bartowski/Meta-Llama-3.1-70B-Instruct-GGUF/resolve/main/"
+        "https://huggingface.co/bartowski/Meta-Llama-3.1-70B-Instruct-GGUF/resolve/main/",
+        2024, 7
     },
     {
         "workstation-translate",
@@ -154,7 +160,8 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         19850,
         "c933aa99b1a3e41ac7ceb16c6794caedbc41e6b40774085b387c1f081ea243cd",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
-        "https://huggingface.co/bartowski/Qwen2.5-32B-Instruct-GGUF/resolve/main/"
+        "https://huggingface.co/bartowski/Qwen2.5-32B-Instruct-GGUF/resolve/main/",
+        2024, 9
     },
 
     // ---- Extreme (≈128+ GB / “use all the RAM”) ----
@@ -168,7 +175,8 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         48657,
         "2f9e44169d7cea93e029d6f8df76f3e801f7efe6f4c8ecc850dc233d81c28862",
         mi_t::Chat | mi_t::Rewrite,
-        "https://huggingface.co/bartowski/Meta-Llama-3.1-70B-Instruct-GGUF/resolve/main/"
+        "https://huggingface.co/bartowski/Meta-Llama-3.1-70B-Instruct-GGUF/resolve/main/",
+        2024, 7
     },
     {
         "extreme-translate",
@@ -179,7 +187,8 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         47420,
         "596abc840bcb94285f1bcc49f762c5e76a6ffbaf4135dcc7d1d0fde963c5aa8b",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
-        "https://huggingface.co/bartowski/Qwen2.5-72B-Instruct-GGUF/resolve/main/"
+        "https://huggingface.co/bartowski/Qwen2.5-72B-Instruct-GGUF/resolve/main/",
+        2024, 9
     },
 
     //  “heavy MoE” (good writing/chat; not primarily translation) ----
@@ -192,7 +201,8 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         26400,
         "5b1060e7b0e484e0ad266b5bfd4ad6a5cc4a05ef0c3d3981bd06b340e1fa0f25",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
-        "https://huggingface.co/TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF/resolve/main/"
+        "https://huggingface.co/TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF/resolve/main/",
+        2023, 12
     },
 
     {
@@ -204,7 +214,8 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         15729,
         "87b4b90e5fd15d1f28c5708c9437f23c6a56b9d10db3c1b38c05ded46ecf1db6",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
-        "https://huggingface.co/DavidAU/OpenAi-GPT-oss-20b-HERETIC-uncensored-NEO-Imatrix-gguf/resolve/main/OpenAI-20B-NEOPlus-Uncensored-Q5_1.gguf?download=true"
+        "https://huggingface.co/DavidAU/OpenAi-GPT-oss-20b-HERETIC-uncensored-NEO-Imatrix-gguf/resolve/main/OpenAI-20B-NEOPlus-Uncensored-Q5_1.gguf?download=true",
+        2025, 11
     },
 
     {
@@ -216,7 +227,8 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         5018,
         "08f155b3c16e2dcd58e3a5f3d2b0c0a24ff3ee6c15d261db758808c44fbfdac7",
         mi_t::Chat | mi_t::Rewrite,
-        "https://huggingface.co/VibeStudio/Nidum-Gemma-2B-Uncensored-GGUF/resolve/main/Nidum-Limitless-Gemma-2B-F16.gguf?download=true"
+        "https://huggingface.co/VibeStudio/Nidum-Gemma-2B-Uncensored-GGUF/resolve/main/Nidum-Limitless-Gemma-2B-F16.gguf?download=true",
+        2024, 8
     },
 
     // ---- Balanced / general chat & research ----
@@ -229,7 +241,8 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         5150,                            // ~5.03 GB
         "b9059e3978453f50a8e9e45a825243abdb8739b2f4623e541fd5a392d9672c0f",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
-        "https://huggingface.co/lm-kit/qwen-3-8b-instruct-gguf/resolve/main/"
+        "https://huggingface.co/lm-kit/qwen-3-8b-instruct-gguf/resolve/main/",
+        2025, 4
     },
     {
         "Qwen3 8B Instruct (Q5_K_M)",
@@ -240,7 +253,8 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         5990,                            // ~5.85 GB
         "",                              // (optional) you can fetch SHA the same way if you want
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
-        "https://huggingface.co/lm-kit/qwen-3-8b-instruct-gguf/resolve/main/"
+        "https://huggingface.co/lm-kit/qwen-3-8b-instruct-gguf/resolve/main/",
+        2025, 4
     },
 
     {
@@ -252,7 +266,8 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         5460,                             // ~5.33 GB
         "9bfda34f9343785f9cfb040dd63a215d0ca8781cb38d5b8825c12e6e1d8230f9",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
-        "https://huggingface.co/bartowski/Yi-1.5-9B-Chat-GGUF/resolve/main/"
+        "https://huggingface.co/bartowski/Yi-1.5-9B-Chat-GGUF/resolve/main/",
+        2024, 5
     },
 
     {
@@ -264,8 +279,104 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         10650,                        // ~10.4 GB
         "603bd3f8a0281d16571da7c08bd661ee17ff0d1be6fcbd1b42242da257ef0bb8",
         mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
-        "https://huggingface.co/bartowski/DeepSeek-Coder-V2-Lite-Instruct-GGUF/resolve/main/"
+        "https://huggingface.co/bartowski/DeepSeek-Coder-V2-Lite-Instruct-GGUF/resolve/main/",
+        2024, 7
     },
+
+    // ---- Ultra-lite / fast ----
+    {
+        "phi3-mini",
+        "phi-3-mini-4k-instruct-q4_k_m",
+        ModelInfo::PromptStyle::ChatML,
+        "Phi-3-mini-4k-instruct-Q4_K_M.gguf",
+        mi_t::Q4_0,
+        2200, // ~2.1–2.3 GB
+        "28a89b4ddb5766355f24e362ae4078b4c35b9ca9568df5fc9e6d9aeee4dee834",
+        mi_t::Chat | mi_t::Rewrite,
+        "https://huggingface.co/bartowski/Phi-3-mini-4k-instruct-GGUF/resolve/main/",
+        2024, 4
+    },
+
+    // ---- Improved Qwen stability ----
+    {
+        "balanced-q5",
+        "qwen2.5-7b-instruct-q5_k_m",
+        ModelInfo::PromptStyle::ChatML,
+        "Qwen2.5-7B-Instruct-Q5_K_M.gguf",
+        mi_t::Q5_0,
+        5200, // ~5.1 GB
+        "2e998d7e181c8756c5ffc55231b9ee1cdc9d3acec4245d6e27d32bd8e738c474",
+        mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
+        "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/",
+        2024, 9
+    },
+
+    {
+        "lite-qwen",
+        "qwen2.5-1.5b-instruct-q4_k_m",
+        ModelInfo::PromptStyle::ChatML,
+        "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+        mi_t::Q4_0,
+        1100, // ~1.1 GB
+        "50961d9b7d3b89e46be230528fc66d38bbdda8ac3748323dd34f129a714124fc",
+        mi_t::Chat | mi_t::Rewrite | mi_t::Translate,
+        "https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/",
+        2024, 9
+    },
+
+    // ---- Gemma 2 (very strong per size) ----
+    {
+        "gemma2-9b",
+        "gemma-2-9b-it-q4_k_m",
+        ModelInfo::PromptStyle::Gemma,
+        "gemma-2-9b-it-Q4_K_M.gguf",
+        mi_t::Q4_0,
+        5600, // ~5.5–5.8 GB
+        "13b2a7b4115bbd0900162edcebe476da1ba1fc24e718e8b40d32f6e300f56dfe",
+        mi_t::Chat | mi_t::Rewrite,
+        "https://huggingface.co/bartowski/gemma-2-9b-it-GGUF/resolve/main/",
+        2024, 6
+    },
+
+    {
+        "gemma2-27b",
+        "gemma-2-27b-it-q4_k_m",
+        ModelInfo::PromptStyle::Gemma,
+        "gemma-2-27b-it-Q4_K_M.gguf",
+        mi_t::Q4_0,
+        17000, // ~16–18 GB
+        "503a87ab47c9e7fb27545ec8592b4dc4493538bd47b397ceb3197e10a0370d23",
+        mi_t::Chat | mi_t::Rewrite,
+        "https://huggingface.co/bartowski/gemma-2-27b-it-GGUF/resolve/main/",
+        2024, 6
+    },
+
+    // ---- Mistral Nemo (modern sweet spot) ----
+    {
+        "pro-nemo",
+        "mistral-nemo-instruct-2407-q4_k_m",
+        ModelInfo::PromptStyle::Mistral,
+        "Mistral-Nemo-Instruct-2407-Q4_K_M.gguf",
+        mi_t::Q4_0,
+        7500, // ~7–8 GB
+        "7c1a10d202d8788dbe5628dc962254d10654c853cae6aaeca0618f05490d4a46",
+        mi_t::Chat | mi_t::Rewrite,
+        "https://huggingface.co/bartowski/Mistral-Nemo-Instruct-2407-GGUF/resolve/main/",
+        2024, 7
+    },
+
+    {
+        "deepseek-v2-lite",
+        "deepseek-v2-lite-instruct-q4_k_m",
+        ModelInfo::PromptStyle::ChatML,
+        "DeepSeek-V2-Lite-Instruct-Q4_K_M.gguf",
+        mi_t::Q4_0,
+        10500,
+        "603bd3f8a0281d16571da7c08bd661ee17ff0d1be6fcbd1b42242da257ef0bb8",
+        mi_t::Chat | mi_t::Rewrite,
+        "https://huggingface.co/bartowski/DeepSeek-V2-Lite-Instruct-GGUF/resolve/main/",
+        2024, 6
+    }
 });
 
 string_view dirPrefix(ModelKind kind) {

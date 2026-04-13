@@ -152,6 +152,17 @@ QVariant AvailableModelsModel::data(const QModelIndex &index, int role) const
         return static_cast<qulonglong>(entry.info->size_mb);
     case Roles::Downloaded:
         return entry.downloaded;
+    case Roles::ReleaseYear:
+        return static_cast<int>(entry.info->release_year);
+    case Roles::ReleaseMonth:
+        return static_cast<int>(entry.info->release_month);
+    case Roles::ReleaseYearMonth:
+        if (entry.info->release_year > 0 && entry.info->release_month >= 1 && entry.info->release_month <= 12) {
+            return QStringLiteral("%1-%2")
+                .arg(entry.info->release_year, 4, 10, QLatin1Char('0'))
+                .arg(entry.info->release_month, 2, 10, QLatin1Char('0'));
+        }
+        return QString{};
     default:
         return {};
     }
@@ -164,5 +175,8 @@ QHash<int, QByteArray> AvailableModelsModel::roleNames() const
     roles[static_cast<int>(Roles::Id)] = "id";
     roles[static_cast<int>(Roles::SizeMB)] = "sizeMB";
     roles[static_cast<int>(Roles::Downloaded)] = "downloaded";
+    roles[static_cast<int>(Roles::ReleaseYear)] = "releaseYear";
+    roles[static_cast<int>(Roles::ReleaseMonth)] = "releaseMonth";
+    roles[static_cast<int>(Roles::ReleaseYearMonth)] = "releaseYearMonth";
     return roles;
 }

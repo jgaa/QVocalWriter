@@ -86,14 +86,16 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
-            visible: inputSource.currentIndex == AppEngine.Mic
 
             Label {
+                id: liveTranscribeLabel
+                visible: inputSource.currentIndex === AppEngine.Mic
                 text: qsTr("Transcribe: Live")
                 Layout.alignment: Qt.AlignVCenter
             }
 
             ModelPicker {
+                visible: liveTranscribeLabel.visible
                 Layout.fillWidth: true
                 model: appEngine.liveTranscribeModels
                 enabled: root.canChangeSettings
