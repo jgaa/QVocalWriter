@@ -272,6 +272,14 @@ public:
         auto mparams = llama_model_default_params();
         mparams.n_gpu_layers = params.n_gpu_layers;
 
+        if (params.use_mmap) {
+            mparams.load_mode = LLAMA_LOAD_MODE_MMAP;
+            LOG_INFO_N << "Using mmap for model loading";
+        } else {
+            LOG_INFO_N << "Not using mmap for model loading";
+            mparams.load_mode = LLAMA_LOAD_MODE_NONE;
+        }
+
         llama_model * model = llama_model_load_from_file(modelPath.c_str(), mparams);
         if (!model) {
             setError(format("Failed to load llama model from {}", modelPath.string()));

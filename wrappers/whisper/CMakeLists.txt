@@ -60,7 +60,7 @@ message(STATUS "qvw_whisper_wrap: QVW_GPU_BACKEND requested=${QVW_GPU_BACKEND_UP
 FetchContent_Declare(
   whisper_cpp
   GIT_REPOSITORY https://github.com/ggml-org/whisper.cpp.git
-  GIT_TAG v1.8.3
+  GIT_TAG v1.9.1
 )
 
 # Build whisper minimal / CPU-only

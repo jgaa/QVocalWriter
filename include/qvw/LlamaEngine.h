@@ -23,6 +23,7 @@ struct LlamaEngineLoadParams : public EngineLoadParams {
     int ctx_size{4096};        // typical default; tune as you like
     int n_gpu_layers{0};       // keep 0 for CPU-only wrapper
     bool flash_attn{false};    // optional
+    bool use_mmap{true};        // optional
 };
 
 class QVW_LLAMA_WRAP_API LlamaSessionCtx : public SessionCtx {
