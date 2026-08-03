@@ -301,6 +301,29 @@ std::string ModelInfo::formatPrompt(messages_view_t messages) const {
         break;
     }
 
+    case PromptStyle::Harmony: {
+        static constexpr std::string_view SYS  = "<|system|>\n";
+        static constexpr std::string_view USER = "<|user|>\n";
+        static constexpr std::string_view ASST = "<|assistant|>\n";
+
+        if (has_system_first(messages)) {
+            oss << SYS << messages.front()->content << "\n";
+        }
+
+        for (const auto & m : without_system(messages)) {
+            if (m->role == PromptRole::User) {
+                oss << USER << m->content << "\n";
+            } else if (m->role == PromptRole::Assistant) {
+                oss << ASST << m->content << "\n";
+            }
+        }
+
+        if (open_assistant_turn) {
+            oss << ASST;
+        }
+        break;
+    }
+
     case PromptStyle::None:
         // handled above
         break;

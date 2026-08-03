@@ -43,6 +43,7 @@ struct ModelInfo {
         Mistral,
         Gemma,
         DeepSeek,
+        Harmony,
         Raw
     };
 
@@ -63,6 +64,7 @@ struct ModelInfo {
         Rewrite     = 1 << 1,
         Translate   = 1 << 2,
         Transcribe  = 1 << 3,
+        Code        = 1 << 4,
     };
 
 

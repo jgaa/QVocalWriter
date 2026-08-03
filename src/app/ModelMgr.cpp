@@ -376,6 +376,48 @@ constexpr auto all_llama_models = std::to_array<mi_t>({
         mi_t::Chat | mi_t::Rewrite,
         "https://huggingface.co/bartowski/DeepSeek-V2-Lite-Instruct-GGUF/resolve/main/",
         2024, 6
+    },
+
+    // https://huggingface.co/Ma7ee7/Qwen3.8_4B_Distilled_GGUF/resolve/main/qwen3-4b-thinking-2507.Q5_K_M.gguf?download=true
+    {
+        "Qwen3.8_4B",
+        "qwen3-4b-thinking-2507-q5_k_m",
+        ModelInfo::PromptStyle::ChatML,
+        "qwen3-4b-thinking-2507.Q5_K_M.gguf",
+        mi_t::Q5_0,
+        3000, // ~3 GB
+        "6de429ec3ccc9c5f8a161de69311c52315211097433278f362d419311498a507",
+        mi_t::Chat | mi_t::Rewrite,
+        "https://huggingface.co/Ma7ee7/Qwen3.8_4B_Distilled_GGUF/resolve/main/",
+        2026, 7
+    },
+
+    // Coding
+    // // https://huggingface.co/JetBrains/Mellum-4b-dpo-all-gguf/resolve/main/mellum-4b-dpo-all.Q8_0.gguf?download=true
+    // {
+    //     "Mellum-4B",
+    //     "mellum-4b-instruct-q8",
+    //     ModelInfo::PromptStyle::ChatML,
+    //     "mellum-4b-dpo-all.Q8_0.gguf",
+    //     mi_t::Q8_0,
+    //     4000, // ~4 GB
+    //     "9e7b95d3e895765ecf16ff56da0c021f4e5c1900a9a528ae2c0e8f5e5cc44684",
+    //     mi_t::Chat | mi_t::Code,
+    //     "https://huggingface.co/JetBrains/Mellum-4b-dpo-all-gguf/resolve/main/",
+    //     2025, 10
+    // },
+    // https://huggingface.co/mradermacher/GPT-OSS-Code-Reasoning-20B-i1-GGUF/resolve/main/GPT-OSS-Code-Reasoning-20B.i1-IQ4_XS.gguf?download=true
+   {
+        "GPT-OSS-Code-Reasoning-20B",
+        "gpt-oss-code-reasoning-20b-i1-q4_k_s",
+        ModelInfo::PromptStyle::Harmony,
+        "GPT-OSS-Code-Reasoning-20B.i1-IQ4_XS.gguf",
+        mi_t::Q4_0,
+        15000, // ~25 GB
+        "efd70fae7c861327687d7795b1b5cefd7dbe8e687dbe903fc331962650f3090f",
+        mi_t::Chat | mi_t::Code,
+        "https://huggingface.co/mradermacher/GPT-OSS-Code-Reasoning-20B-i1-GGUF/resolve/main/",
+        2025, 8
     }
 });
 
